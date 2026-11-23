@@ -1,0 +1,21 @@
+using LocalHomeModule;
+int checks=0;
+void Check(bool ok,string name) { if(!ok) throw new Exception(name); checks++; }
+var input=new[]{new MechanismTree.Node("c","child","b"),new MechanismTree.Node("r2","root2",null),new MechanismTree.Node("b","branch","a"),new MechanismTree.Node("a","root1",null)};
+var collapsed=new HashSet<string>();
+var rows=MechanismTree.Flatten(input,collapsed);
+Check(rows.Select(n=>n.Id).SequenceEqual(new[]{"r2","a","b","c"}),"child follows parent despite input order");
+Check(rows.Select(n=>n.Depth).SequenceEqual(new[]{0,0,1,2}),"depth");
+Check(rows[1].HasChildren&&rows[2].HasChildren&&!rows[3].HasChildren,"branches");
+collapsed.Add("a"); rows=MechanismTree.Flatten(input,collapsed);
+Check(rows.Select(n=>n.Id).SequenceEqual(new[]{"r2","a"}),"collapse removes descendants");
+Check(rows[1].HasChildren&&!rows[1].Expanded,"collapsed state");
+collapsed.Clear(); Check(MechanismTree.Flatten(input,collapsed).Length==4,"expand restores children");
+var chain=Enumerable.Range(0,128).Reverse().Select(i=>new MechanismTree.Node(i.ToString(),"n"+i,i==0?null:(i-1).ToString())).ToArray();
+rows=MechanismTree.Flatten(chain,collapsed);
+Check(rows.Length==128&&rows[^1].Depth==127,"128 level tree");
+for(int i=0;i<128;i++) Check(rows[i].Id==i.ToString(),"ordered chain "+i);
+Check(MechanismTree.Flatten(Array.Empty<MechanismTree.Node>(),collapsed).Length==0,"empty");
+Check(MechanismTree.Flatten(new[]{new MechanismTree.Node("a","a","missing")},collapsed)[0].Depth==0,"orphan safe root");
+Check(MechanismTree.Flatten(new[]{new MechanismTree.Node("a","a","b"),new MechanismTree.Node("b","b","a")},collapsed).Length==0,"invalid cycle terminates");
+Console.WriteLine($"MechanismTreeVerification: {checks} checks passed.");

@@ -1,0 +1,185 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- ============================================================ -->
+	<!--  基础属性                                                      -->
+	<!-- ============================================================ -->
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<TargetFramework>net6.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+
+		<!-- ★ 关闭 ImplicitUsings/Nullable，避免 Il2Cpp 命名空间冲突 -->
+		<ImplicitUsings>disable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+
+		<!-- ★ x64（匹配 MelonLoader） -->
+		<Platforms>AnyCPU;x64</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+		<Prefer32Bit>false</Prefer32Bit>
+
+		<ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+		<!-- ★ 输出到 GameMods\Mods\ -->
+		<OutputPath>..\GameMods\Mods\</OutputPath>
+		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+		<AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+
+		<!-- ★ 不复制依赖 DLL -->
+		<CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+		<AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+		<GenerateDependencyFile>false</GenerateDependencyFile>
+
+		<!-- ★ Release 不生成 pdb -->
+		
+
+		<!-- ★ 屏蔽无用警告 -->
+		<NoWarn>$(NoWarn);CS0168;CS0169;CS0414</NoWarn>
+
+		<!-- ============================================================ -->
+		<!--  版本 / 模块信息（每次发布改这里）                             -->
+		<!-- ============================================================ -->
+		<Version>1.0.7</Version>
+		<ModuleId>logic_main</ModuleId>
+		<ModulePriority>10</ModulePriority>
+	</PropertyGroup>
+
+	<!-- Shared output and post-build manifest generation. -->
+	<Import Project="..\build\HotUpdate.targets" />
+
+	<!-- ============================================================ -->
+	<!--  项目引用                                                      -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<ProjectReference Include="..\mod\mod.csproj" GlobalPropertiesToRemove="Version;AssemblyVersion;FileVersion;InformationalVersion;ModuleId;ModulePriority;ModuleEnabled">
+			<Private>false</Private>
+		</ProjectReference>
+	</ItemGroup>
+
+	<!-- ============================================================ -->
+	<!--  第三方库                                                      -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<Reference Include="0Harmony">
+			<HintPath>..\libs\0Harmony.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Chat.Client">
+			<HintPath>..\libs\Chat.Client.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="MelonLoader">
+			<HintPath>..\libs\MelonLoader.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<HintPath>..\libs\Newtonsoft.Json.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<!-- ============================================================ -->
+	<!--  Il2Cpp 运行时                                                -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<Reference Include="Il2CppInterop.Common">
+			<HintPath>..\libs\Il2CppInterop.Common.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Il2CppInterop.Runtime">
+			<HintPath>..\libs\Il2CppInterop.Runtime.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Il2Cppmscorlib">
+			<HintPath>..\libs\Il2Cppmscorlib.dll</HintPath>
+			<Private>false</Private>
+			<Aliases>global,Il2Cppmscorlib</Aliases>
+		</Reference>
+		<Reference Include="Il2Cppootii">
+			<HintPath>..\libs\Il2Cppootii.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<!-- ============================================================ -->
+	<!--  游戏程序集                                                    -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<Reference Include="Assembly-CSharp">
+			<HintPath>..\libs\Assembly-CSharp.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Assembly-CSharp-firstpass">
+			<HintPath>..\libs\Assembly-CSharp-firstpass.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.AnimationModule">
+		  <HintPath>..\libs\UnityEngine.AnimationModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.AudioModule">
+		  <HintPath>..\libs\UnityEngine.AudioModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<!-- ============================================================ -->
+	<!--  Unity 引擎模块                                                -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<Reference Include="UnityEngine.CoreModule">
+			<HintPath>..\libs\UnityEngine.CoreModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+
+		<!-- ★ 新增：Collider / Rigidbody / Physics.Raycast -->
+		<Reference Include="UnityEngine.PhysicsModule">
+			<HintPath>..\libs\UnityEngine.PhysicsModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+
+		<Reference Include="UnityEngine.AssetBundleModule">
+			<HintPath>..\libs\UnityEngine.AssetBundleModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.ImageConversionModule">
+			<HintPath>..\libs\UnityEngine.ImageConversionModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.InputLegacyModule">
+			<HintPath>..\libs\UnityEngine.InputLegacyModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.TextRenderingModule">
+			<HintPath>..\libs\UnityEngine.TextRenderingModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.TextCoreTextEngineModule">
+			<HintPath>..\libs\UnityEngine.TextCoreTextEngineModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.UIModule">
+			<HintPath>..\libs\UnityEngine.UIModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.UI">
+			<HintPath>..\libs\UnityEngine.UI.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.UIElementsModule">
+			<HintPath>..\libs\UnityEngine.UIElementsModule.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<!-- ============================================================ -->
+	<!--  TextMeshPro                                                  -->
+	<!-- ============================================================ -->
+	<ItemGroup>
+		<Reference Include="Unity.TextMeshPro">
+			<HintPath>..\libs\Unity.TextMeshPro.dll</HintPath>
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+</Project>

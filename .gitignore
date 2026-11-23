@@ -1,0 +1,62 @@
+# Local game / loader assemblies (see libs/README.md)
+/libs/*
+!/libs/README.md
+
+# Generated releases, exported game assets, and scratch experiments
+/artifacts/
+/GameMods/
+/server/
+/scratch/
+
+# .NET build output, including custom verification output directories
+[Bb]in/
+[Oo]bj/
+bin-*/
+obj-*/
+binV*/
+objV*/
+[Dd]ebug/
+[Rr]elease/
+TestResults/
+verification-output/
+verification-results.txt
+*.dll
+*.exe
+*.pdb
+*.cache
+*.nupkg
+*.snupkg
+.version-generator.lock
+
+# IDE, assistant state, and local SDK caches
+.vs/
+.vscode/
+.idea/
+.workbuddy/
+.dotnet-home/
+.nuget-packages/
+*.user
+*.suo
+*.sln.docstates
+
+# Python / temporary files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store
+
+# Local credentials and runtime configuration
+.env
+.env.*
+!.env.example
+deepseek_config.json
+*.local.json
+*.pfx
+*.p12
+*.pem
+*.key

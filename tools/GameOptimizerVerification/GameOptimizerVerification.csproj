@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../GameOptimizerModule/OptimizerPolicy.cs" Link="OptimizerPolicy.cs" />
+    <Compile Include="../../GameOptimizerModule/BundleMetadataCache.cs" Link="BundleMetadataCache.cs" />
+    <Compile Include="../../GameOptimizerModule/FrameMetrics.cs" Link="FrameMetrics.cs" />
+    <Reference Include="Mono.Cecil"><HintPath>../../libs/Mono.Cecil.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

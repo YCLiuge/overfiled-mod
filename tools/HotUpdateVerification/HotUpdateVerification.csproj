@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Fixtures/**/*.cs" />
+    <Compile Include="../../mod/ModLoader/LogicLoader.cs" Link="Production/LogicLoader.cs" />
+    <Compile Include="../../mod/ModLoader/LogicUpdater.cs" Link="Production/LogicUpdater.cs" />
+    <Compile Include="../../mod/ModLoader/ILogic.cs" Link="Production/ILogic.cs" />
+    <Reference Include="Newtonsoft.Json"><HintPath>../../libs/Newtonsoft.Json.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

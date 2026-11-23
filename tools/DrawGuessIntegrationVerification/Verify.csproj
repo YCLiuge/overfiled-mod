@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+<ItemGroup>
+<Compile Include="../../mod/st/NetChater.cs" Link="Host/NetChater.cs" />
+<Compile Include="../../mod/st/NetCommands.cs" Link="Host/NetCommands.cs" />
+<Compile Include="../../DrawGuessModule/MainLogic.cs" Link="MainLogic.cs" />
+<Compile Include="../../DrawGuessModule/FreePaintingRuntime.cs" Link="FreePaintingRuntime.cs" />
+<Compile Include="../../DrawGuessModule/ChannelSync.cs" Link="ChannelSync.cs" />
+<Compile Include="../../DrawGuessModule/Board*.cs" Exclude="../../DrawGuessModule/BoardRendering.cs" Link="%(Filename)%(Extension)" />
+<Compile Include="../../DrawGuessModule/Core/*.cs" Link="Core/%(Filename)%(Extension)" />
+<Compile Include="../../服务器/Chat.Client/*.cs" Link="Client/%(Filename)%(Extension)" />
+<Compile Include="../../服务器/Chat.Protocol/*.cs" Link="Protocol/%(Filename)%(Extension)" />
+<Reference Include="Newtonsoft.Json"><HintPath>../../libs/Newtonsoft.Json.dll</HintPath><Private>true</Private></Reference>
+</ItemGroup>
+</Project>

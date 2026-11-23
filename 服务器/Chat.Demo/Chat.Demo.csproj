@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      默认 net9.0。同一个工程也可以编到 .NET Framework 4.8（用于验证客户端 DLL 在 Framework 上可用）：
+        dotnet build Chat.Demo -p:ChatTfms=net48
+        dotnet build Chat.Demo -p:ChatTfms="net9.0;net48"
+    -->
+    <TargetFramework Condition="'$(ChatTfms)' == ''">net9.0</TargetFramework>
+    <TargetFrameworks Condition="'$(ChatTfms)' != ''">$(ChatTfms)</TargetFrameworks>
+
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Chat.Demo</AssemblyName>
+    <RootNamespace>Chat.Demo</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Version>1.0.0</Version>
+    <Product>频道聊天客户端示例</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Chat.Client\Chat.Client.csproj" />
+  </ItemGroup>
+
+</Project>

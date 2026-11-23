@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      默认只产出 netstandard2.0 一个目标：.NET Framework 4.6.2+ / .NET Core 2.0+ / .NET 5+ / Unity 都能引用。
+      受限或离线环境可以用 -p:ChatTfms=... 覆盖目标框架，例如：
+        dotnet build Chat.Client -p:ChatTfms=net48          只产出 .NET Framework 4.8 版本
+        dotnet build Chat.Client -p:ChatTfms=net9.0         只产出 .NET 9 版本（便于本机调试）
+        dotnet build Chat.Client -p:ChatTfms="netstandard2.0;net48"   两个都要
+    -->
+    <TargetFramework Condition="'$(ChatTfms)' == ''">netstandard2.0</TargetFramework>
+    <TargetFrameworks Condition="'$(ChatTfms)' != ''">$(ChatTfms)</TargetFrameworks>
+
+    <OutputType>Library</OutputType>
+    <AssemblyName>Chat.Client</AssemblyName>
+    <RootNamespace>Chat.Client</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.0.0</Version>
+    <Product>频道聊天客户端库</Product>
+    <Description>连接频道聊天 TCP 服务器的 .NET Standard 2.0 客户端库，零第三方依赖。</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Chat.Protocol 是「共享源码目录」而不是独立项目：这些源码直接编进本程序集，
+      使得 Chat.Client.dll 只有一个文件、不依赖任何第三方包（连 System.Text.Json 都不需要）。
+      服务器项目用同样的方式把这份源码编进 Chat.Server.exe。
+    -->
+    <Compile Include="..\Chat.Protocol\**\*.cs"
+             Exclude="..\Chat.Protocol\bin\**;..\Chat.Protocol\obj\**"
+             Link="Protocol\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

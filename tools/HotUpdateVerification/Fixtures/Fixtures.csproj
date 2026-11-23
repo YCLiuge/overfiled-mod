@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net6.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><CheckEolTargetFramework>false</CheckEolTargetFramework></PropertyGroup>
+  <ItemGroup><Reference Include="HotUpdateVerification"><HintPath>../bin/Release/net6.0/HotUpdateVerification.dll</HintPath><Private>false</Private></Reference></ItemGroup>
+</Project>

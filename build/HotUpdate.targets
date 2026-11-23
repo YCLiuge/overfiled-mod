@@ -1,0 +1,27 @@
+<Project>
+  <!-- Imported only by the three game DLL projects, not by the tools. -->
+  <PropertyGroup>
+    <ModsDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\GameMods\Mods'))</ModsDirectory>
+    <OutputPath>$(ModsDirectory)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+    <PlatformTarget>x64</PlatformTarget>
+    <ModulePriority Condition="'$(ModulePriority)' == ''">100</ModulePriority>
+    <ModuleEnabled Condition="'$(ModuleEnabled)' == ''">true</ModuleEnabled>
+    <ManifestGeneratorDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\VersionManifestGenerator'))</ManifestGeneratorDirectory>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ModuleId)' != ''">
+    <AssemblyMetadata Include="HotUpdate.ModuleId" Value="$(ModuleId)" />
+    <AssemblyMetadata Include="HotUpdate.Priority" Value="$(ModulePriority)" />
+    <AssemblyMetadata Include="HotUpdate.Enabled" Value="$(ModuleEnabled)" />
+    <AssemblyMetadata Include="HotUpdate.Notes" Value="$(ModuleNotes)" Condition="'$(ModuleNotes)' != ''" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(ManifestGeneratorDirectory)\VersionManifestGenerator.csproj"
+                      ReferenceOutputAssembly="false" Private="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;OutputPath;OutDir;Version;AssemblyVersion;FileVersion;InformationalVersion" />
+  </ItemGroup>
+  <Target Name="GenerateHotUpdateManifest" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="dotnet &quot;$(ManifestGeneratorDirectory)\bin\$(Configuration)\VersionManifestGenerator.dll&quot; &quot;$(ModsDirectory)&quot;" />
+  </Target>
+</Project>

@@ -1,0 +1,9 @@
+# VS / Rider / dotnet 构建产物
+bin/
+obj/
+*.user
+.vs/
+
+# 沙箱内构建时产生的本地缓存（正常开发环境不需要）
+.dotnet-home/
+.nuget-packages/

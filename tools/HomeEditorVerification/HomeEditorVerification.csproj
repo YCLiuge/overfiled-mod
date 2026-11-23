@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>obj-editor/</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>obj-editor/</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <BaseIntermediateOutputPath>obj-editor/</BaseIntermediateOutputPath>
+    <OutputPath>bin-editor/</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../LocalHomeModule/Layout.cs" Link="Production/Layout.cs" />
+    <Compile Include="../../LocalHomeModule/Geometry.cs" Link="Production/Geometry.cs" />
+    <Compile Include="../../LocalHomeModule/HomeEditor.cs" Link="Production/HomeEditor.cs" />
+    <Compile Include="Stubs.cs" />
+    <Compile Include="EditorTests.cs" />
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

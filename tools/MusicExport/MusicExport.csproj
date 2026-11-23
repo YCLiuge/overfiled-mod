@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net6.0</TargetFramework><OutputType>Library</OutputType><AssemblyName>MusicBundleExportV2</AssemblyName><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Offline/**/*.cs" />
+    <Compile Include="../../Logic/BundleHelper.cs" Link="BundleHelper.cs" />
+    <Reference Include="../../libs/*.dll"><Private>false</Private></Reference>
+    <Reference Include="mod"><HintPath>../../GameMods/Mods/mod.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

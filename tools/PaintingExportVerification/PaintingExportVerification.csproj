@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../DrawGuessModule/Core/PngWriter.cs" Link="PngWriter.cs" />
+    <Compile Include="../../DrawGuessModule/PaintingExport.cs" Link="PaintingExport.cs" />
+  </ItemGroup>
+</Project>

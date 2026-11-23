@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../服务器/Chat.Server/*.cs" Exclude="../../服务器/Chat.Server/Program.cs" Link="Server/%(Filename)%(Extension)" />
+    <Compile Include="../../服务器/Chat.Client/*.cs" Link="Client/%(Filename)%(Extension)" />
+    <Compile Include="../../服务器/Chat.Protocol/*.cs" Link="Protocol/%(Filename)%(Extension)" />
+    <Compile Include="../../服务器/Chat.Demo/GameSmokeTest.cs" Link="Legacy/GameSmokeTest.cs" />
+    <Compile Include="../../服务器/Chat.Demo/AsyncInbox.cs" Link="Legacy/AsyncInbox.cs" />
+    <Compile Include="../../服务器/Chat.Demo/Checker.cs" Link="Legacy/Checker.cs" />
+  </ItemGroup>
+</Project>

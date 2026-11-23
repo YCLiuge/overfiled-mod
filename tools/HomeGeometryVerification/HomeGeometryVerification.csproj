@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../LocalHomeModule/Layout.cs" Link="Layout.cs" />
+    <Compile Include="../../LocalHomeModule/Geometry.cs" Link="Geometry.cs" />
+  </ItemGroup>
+</Project>

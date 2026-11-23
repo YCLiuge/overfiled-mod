@@ -1,0 +1,9 @@
+{
+  "method": "Real loopback TCP: isolated dotnet server, HELLO, BOARD channel=general text=probe, 3 clients in channel and one outsider",
+  "beforeChanges": [
+    { "dll": "Chat.Server/bin/Release/net9.0/Chat.Server.dll", "lastWriteLocal": "2026-11-13T20:48:45+08:00", "sha256": "e030963fde8f4869b513ac01d2f9af093520922bac88bf6e9d29bfc283f4f9dd", "boardReply": {"command":"OK","id":2,"delivered":2} },
+    { "dll": "Chat.Server/bin/Debug/net9.0/Chat.Server.dll", "lastWriteLocal": "2026-11-13T17:55:54+08:00", "sha256": "6324f44c50626d3a2e740c491b05e4cd892749a7b15dd17d3e1cc67b87fa4d47", "boardReply": {"command":"ERR","id":2,"code":"unknown_command","msg":"未知命令: BOARD"} }
+  ],
+  "source": "ChatTcpServer.cs already contained an unconditional BOARD switch branch; source timestamp 2026-11-13T19:51:55+08:00. csproj uses SDK default Compile items and includes Chat.Protocol shared source. No exclusion or conditional compilation of BOARD.",
+  "limit": "Public production process was not contacted. Its exact deployed binary is unverified. Local old Debug reproduces reported error."
+}
