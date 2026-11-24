@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);TUNNEL_VERIFY</DefineConstants>
+    <BaseIntermediateOutputPath>obj/TunnelCompatibility/</BaseIntermediateOutputPath>
+    <OutputPath>bin/TunnelCompatibility/</OutputPath>
+    <NoWarn>$(NoWarn);NETSDK1138</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="TunnelCompatibility.cs" />
+    <Compile Include="../ClientRedirect/TunnelClient.cs" Link="TunnelClient.cs" />
+  </ItemGroup>
+</Project>

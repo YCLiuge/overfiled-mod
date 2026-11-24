@@ -60,3 +60,24 @@ deepseek_config.json
 *.p12
 *.pem
 *.key
+
+# Local private-server checkout, game tables, toolchain and runtime state
+/private-server/Lolo/
+/private-server/runtime-tools/
+/private-server/client/
+/private-server/reference/
+/private-server/backups/
+
+# Generated tunnel keys and friend distribution bundles
+/private-server/TcpBridge/server.json
+/private-server/TcpBridge/probe.json
+/private-server/TcpBridge/.gocache/
+/private-server/TcpBridge/.gotmp/
+/private-server/friend-package/
+/private-server/OverField-Friend-Client.zip
+
+# Local reverse-engineering evidence and temporary Git indexes
+/private-server/**/*evidence*.txt
+/private-server/*evidence*.txt
+/private-server/*.index
+/private-server/ClientRedirect.Verify/.tunnel-test/

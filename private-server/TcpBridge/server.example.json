@@ -1,0 +1,5 @@
+{
+  "Mode": "server",
+  "Listen": "127.0.0.1:10086",
+  "Key": "REPLACE_WITH_64_HEX_CHARACTERS"
+}

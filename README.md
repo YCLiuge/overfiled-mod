@@ -15,6 +15,16 @@
 
 各模块的功能与命令见对应目录中的 README；AI 控制接口见 [AIControlServer.md](AIControlServer.md)。
 
+## 本地私服与参考项目
+
+新增的 [private-server](private-server/README.md) 包含客户端重定向插件、加密 TCP 桥接、固定版本服务端补丁、构建部署脚本及回归测试。当前补丁版本为 `local-sandbox-12`，包含沙盒解锁、多人互动动作、篝火和钓鱼流程；首次搭建见 [搭建说明](private-server/SETUP.md)。
+
+- [BanterSR/Lolo](https://github.com/BanterSR/Lolo)：服务端基础项目，本仓库保存其固定提交上的增量补丁。
+- [BanterSR/LoloResource](https://github.com/BanterSR/LoloResource)：服务端运行资源与配置来源，需单独获取。
+- [byzp/of-ps](https://github.com/byzp/of-ps)：开发时参考的相关实现；当前运行服务端基于 Lolo。
+
+感谢上述项目作者与贡献者。第三方源码、资源及游戏内容保留各自权利和使用条件，详见 [来源与署名](private-server/REFERENCES.md)。玩家数据库、连接密钥和游戏资源不随仓库发布。
+
 ## 构建准备
 
 1. 安装支持目标框架的 .NET SDK。Mod 项目目标为 .NET 6，聊天服务器目标为 .NET 9；部分验证工具运行时也需要 .NET 6。

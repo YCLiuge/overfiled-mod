@@ -1,0 +1,5 @@
+{
+  "Mode": "client",
+  "Remote": "relay.example.com:50505",
+  "Key": "REPLACE_WITH_THE_SAME_64_HEX_CHARACTERS"
+}
