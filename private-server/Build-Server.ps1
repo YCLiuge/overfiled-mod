@@ -45,7 +45,7 @@ if (!$TestOnly) {
         New-Item -ItemType Directory -Force $backup | Out-Null
         Copy-Item $exe $backup
     }
-    & $go -C $lolo build -trimpath -ldflags '-s -w -X gucooing/lolo/pkg.Commit=375423e-local-fixes -X gucooing/lolo/pkg.ServerVersion=local-sandbox-12' -o $exe ./main.go
+    & $go -C $lolo build -trimpath -ldflags '-s -w -X gucooing/lolo/pkg.Commit=375423e-local-fixes -X gucooing/lolo/pkg.ServerVersion=local-sandbox-13' -o $exe ./main.go
     if ($LASTEXITCODE -ne 0) { throw 'Server build failed.' }
     Get-FileHash $exe -Algorithm SHA256
 }

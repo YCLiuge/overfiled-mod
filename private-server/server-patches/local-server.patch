@@ -3199,7 +3199,7 @@ index a6983d1..2ec06f5 100644
 +	return err
 +}
 diff --git a/game/player_basic.go b/game/player_basic.go
-index 5b461fb..645d303 100644
+index 5b461fb..8db23dc 100644
 --- a/game/player_basic.go
 +++ b/game/player_basic.go
 @@ -7,6 +7,7 @@ import (
@@ -3372,7 +3372,29 @@ index 5b461fb..645d303 100644
  }
  
  func (g *Game) ChangePhoneBackground(s *model.Player, msg *alg.GameMsg) {
-@@ -502,13 +544,6 @@ func (g *Game) PlayerVitality(s *model.Player, msg *alg.GameMsg) {
+@@ -370,7 +412,20 @@ func (g *Game) GamePlayReward(s *model.Player, msg *alg.GameMsg) {
+ }
+ 
+ func (g *Game) AcceptQuest(s *model.Player, msg *alg.GameMsg) {
+-	req := msg.Body.(*proto.AcceptQuestReq)
++	req, ok := msg.Body.(*proto.AcceptQuestReq)
++	if !ok || req == nil {
++		g.send(s, msg.PacketId, &proto.AcceptQuestRsp{Status: proto.StatusCode_StatusCode_BAD_REQ})
++		return
++	}
++	conf := gdconf.GetQuestInfos()[req.QuestId]
++	if conf == nil || conf.Config == nil || proto.EQuestType(conf.Config.NewType) != req.QuestType {
++		g.send(s, msg.PacketId, &proto.AcceptQuestRsp{Status: proto.StatusCode_StatusCode_BAD_REQ})
++		return
++	}
++	if quest := model.SandboxStoryQuest(req.QuestId); quest != nil {
++		g.send(s, msg.PacketId, &proto.AcceptQuestRsp{Status: proto.StatusCode_StatusCode_OK, Quest: quest})
++		return
++	}
+ 	rsp := &proto.AcceptQuestRsp{
+ 		Status: proto.StatusCode_StatusCode_OK,
+ 		Quest: &proto.Quest{
+@@ -502,13 +557,6 @@ func (g *Game) PlayerVitality(s *model.Player, msg *alg.GameMsg) {
  }
  
  func (g *Game) TreasureIllustrationInfo(s *model.Player, msg *alg.GameMsg) {
@@ -6134,3 +6156,113 @@ index 954361d..f0f2873 100644
  
  	// 1. 解析自定义的e值
  	e := new(big.Int)
+diff --git a/game/model/quest.go b/game/model/quest.go
+index 4869ebe..cb83d89 100644
+--- a/game/model/quest.go
++++ b/game/model/quest.go
+@@ -2,57 +2,67 @@ package model
+ 
+ import (
+ 	"gucooing/lolo/gdconf"
+-	"gucooing/lolo/pkg/alg"
+ 	"gucooing/lolo/protocol/proto"
++	"sort"
+ )
+ 
+-func (s *Player) GetQuestDetail() *proto.QuestDetail {
+-	info := &proto.QuestDetail{
+-		Chapters:                make([]*proto.Chapter, 0),
+-		DailyQuestBonusDayLeft:  nil,
+-		DailyQuestBonusWeekLeft: nil,
+-		RandomQuestBonusLeft:    nil,
+-		Quests:                  make([]*proto.Quest, 0),
++// SandboxStoryQuest returns a detached completion projection. No player save or
++// inventory is modified: story replays use completed prerequisites at login.
++func SandboxStoryQuest(id uint32) *proto.Quest {
++	info := gdconf.GetQuestInfos()[id]
++	if id == 0 || info == nil || info.Config == nil {
++		return nil
+ 	}
+-	for chapterId, chapterInfo := range gdconf.GetStoryChapters() {
+-		chapter := &proto.Chapter{
+-			ChapterId:        chapterId,
+-			RewardedStoryIds: make([]uint32, 0),
+-		}
+-		for StoryId, _ := range chapterInfo.StoryList {
+-			chapter.RewardedStoryIds = append(chapter.RewardedStoryIds, StoryId)
++	switch proto.EQuestType(info.Config.NewType) {
++	case proto.EQuestType_EQuestType_MainQuest, proto.EQuestType_EQuestType_ExtraQuest:
++	default:
++		return nil
++	}
++	quest := &proto.Quest{QuestId: id, Conditions: make([]*proto.Condition, 0), Status: proto.QuestStatus_QuestStatus_Finish, CompleteCount: 1, BonusTimes: 1}
++	seen := make(map[uint32]bool)
++	for _, set := range info.ConditionSetGroup.GetQuestConditionSet() {
++		for _, raw := range set.GetAchieveConditionID() {
++			if raw <= 0 || seen[uint32(raw)] {
++				continue
++			}
++			id := uint32(raw)
++			seen[id] = true
++			progress := uint32(1)
++			if condition := gdconf.GetAchieveConfigure(id); condition != nil && condition.CountParam > 0 {
++				progress = uint32(condition.CountParam)
++			}
++			quest.Conditions = append(quest.Conditions, &proto.Condition{ConditionId: id, Progress: progress, Status: proto.QuestStatus_QuestStatus_Finish})
+ 		}
+-		alg.AddList(&info.Chapters, chapter)
+ 	}
+-	for questId, questInfo := range gdconf.GetQuestInfos() {
+-		if proto.EQuestType(questInfo.Config.NewType) != proto.EQuestType_EQuestType_MainQuest {
++	sort.Slice(quest.Conditions, func(i, j int) bool { return quest.Conditions[i].ConditionId < quest.Conditions[j].ConditionId })
++	return quest
++}
++
++func (s *Player) GetQuestDetail() *proto.QuestDetail {
++	info := &proto.QuestDetail{Chapters: make([]*proto.Chapter, 0), Quests: make([]*proto.Quest, 0)}
++	for chapterID, conf := range gdconf.GetStoryChapters() {
++		if chapterID == 0 || conf == nil {
+ 			continue
+ 		}
+-		quest := &proto.Quest{
+-			QuestId:       questId,
+-			Conditions:    make([]*proto.Condition, 0),
+-			Status:        proto.QuestStatus_QuestStatus_Finish,
+-			CompleteCount: 1,
+-			BonusTimes:    1,
+-			ActivityId:    0,
+-		}
+-		for _, set := range questInfo.ConditionSetGroup.QuestConditionSet {
+-			for _, achieveConditionID := range set.AchieveConditionID {
+-				alg.AddList(&quest.Conditions, &proto.Condition{
+-					ConditionId: uint32(achieveConditionID),
+-					Progress:    1,
+-					Status:      proto.QuestStatus_QuestStatus_Finish,
+-				})
++		chapter := &proto.Chapter{ChapterId: chapterID, RewardedStoryIds: make([]uint32, 0)}
++		for storyID := range conf.StoryList {
++			if storyID > 0 {
++				chapter.RewardedStoryIds = append(chapter.RewardedStoryIds, storyID)
+ 			}
+ 		}
+-		alg.AddList(&info.Quests, quest)
++		sort.Slice(chapter.RewardedStoryIds, func(i, j int) bool { return chapter.RewardedStoryIds[i] < chapter.RewardedStoryIds[j] })
++		info.Chapters = append(info.Chapters, chapter)
+ 	}
+-
++	for id := range gdconf.GetQuestInfos() {
++		if quest := SandboxStoryQuest(id); quest != nil {
++			info.Quests = append(info.Quests, quest)
++		}
++	}
++	sort.Slice(info.Chapters, func(i, j int) bool { return info.Chapters[i].ChapterId < info.Chapters[j].ChapterId })
++	sort.Slice(info.Quests, func(i, j int) bool { return info.Quests[i].QuestId < info.Quests[j].QuestId })
+ 	return info
+ }
+ 
+ func (s *Player) GetPlayerQuestionnaireInfo() *proto.PlayerQuestionnaireInfo {
+-	return &proto.PlayerQuestionnaireInfo{
+-		ToFill: make([]*proto.QuestionnaireBrief, 0),
+-	}
++	return &proto.PlayerQuestionnaireInfo{ToFill: make([]*proto.QuestionnaireBrief, 0)}
+ }

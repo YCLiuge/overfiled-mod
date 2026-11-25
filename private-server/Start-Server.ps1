@@ -10,6 +10,12 @@ foreach ($port in $ports) {
     $listener = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue
     if ($listener) { throw "Port $port is in use. Stop the existing server or change config before starting." }
 }
+# Promote a tested staged build only after the old service has released its ports.
+$stagedInstall = Join-Path $PSScriptRoot 'Install-StagedServer.ps1'
+if (Test-Path -LiteralPath $stagedInstall) { & $stagedInstall }
+# Sync this machine's installed resource version before the server loads its data.
+$versionSync = Join-Path $PSScriptRoot 'Sync-ClientVersion.ps1'
+if (Test-Path -LiteralPath $versionSync) { & $versionSync }
 Push-Location $serverDirectory
 try {
     & $exe -c './config.json'
