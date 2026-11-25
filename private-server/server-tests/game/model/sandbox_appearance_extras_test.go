@@ -18,7 +18,7 @@ func TestLocalAppearanceExtrasCatalogAndWire(t *testing.T) {
 	if a == nil {
 		t.Fatal("extras catalog not loaded")
 	}
-	expected := map[string]int{"badge": 253, "umbrella": 240, "pendant": 38, "avatarFrame": 62, "phoneCase": 31, "head": 207, "collectionGloves": 8, "loggingAxe": 9, "miningHammer": 9, "insectNet": 9, "waterBottle": 9, "fishingRod": 10, "vehicle": 19, "shovel": 3}
+	expected := map[string]int{"badge": 253, "umbrella": 240, "pendant": 38, "avatarFrame": 62, "phoneCase": 31, "head": 207, "unarmed": 1, "collectionGloves": 8, "loggingAxe": 9, "miningHammer": 9, "insectNet": 9, "waterBottle": 9, "fishingRod": 10, "vehicle": 19, "shovel": 3}
 	p := new(Player)
 	p.ApplySandboxAppearanceExtras()
 	for category, n := range expected {
@@ -115,8 +115,8 @@ func TestLocalAppearanceExtrasCatalogAndWire(t *testing.T) {
 			}
 		}
 	}
-	if n != 76 {
-		t.Fatalf("expected 76 actual tool/vehicle weapon rows, got %d", n)
+	if n != 77 {
+		t.Fatalf("expected 77 actual tool/vehicle weapon rows, got %d", n)
 	}
 	if p.OwnsAppearanceExtra("badge", 4000) || p.OwnsAppearanceExtra("vehicle", 1007001) || p.OwnsAppearanceExtra("missing", 4000) || p.OwnsAppearanceExtra("umbrella", 0) {
 		t.Fatal("wrong category accepted")

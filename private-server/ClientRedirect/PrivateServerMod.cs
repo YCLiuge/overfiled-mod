@@ -3,7 +3,7 @@ using System.Text.Json;
 using HarmonyLib;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(OverField.PrivateServer.PrivateServerMod), "OverField Local Server Redirect", "0.3.1", "Local")]
+[assembly: MelonInfo(typeof(OverField.PrivateServer.PrivateServerMod), "OverField Local Server Redirect", "0.3.2", "Local")]
 [assembly: MelonPlatformDomain(MelonPlatformDomainAttribute.CompatibleDomains.IL2CPP)]
 
 namespace OverField.PrivateServer;
@@ -26,6 +26,7 @@ public sealed class PrivateServerMod : MelonMod
         public string TunnelRemote { get; set; } = "relay.example.com:50505";
         public string TunnelKey { get; set; } = "";
         public bool SkipHotUpdate { get; set; }
+        public bool HideErrorOverlay { get; set; } = true;
     }
 
     public override void OnInitializeMelon()
@@ -92,6 +93,16 @@ public sealed class PrivateServerMod : MelonMod
                 tcpHooks++;
             }
             if (settings.SkipHotUpdate) SkipHotUpdate.Install(HarmonyInstance);
+            if (settings.HideErrorOverlay)
+            {
+                var overlayHarmony = new HarmonyLib.Harmony("OverField.PrivateServer.ErrorOverlay");
+                try { ErrorOverlay.Install(overlayHarmony); }
+                catch (Exception ex)
+                {
+                    overlayHarmony.UnpatchSelf();
+                    MelonLogger.Warning("[PrivateServer] Error overlay patch unavailable: " + ex.Message);
+                }
+            }
             MelonLogger.Msg($"[PrivateServer] {tcpHooks} game/log gateway hooks installed: {_gatewayHost}:{_gatewayPort}/{_logPort}");
             MelonLogger.Msg($"[PrivateServer] {count} HTTP hooks installed. Target: {_target.GetLeftPart(UriPartial.Authority)}. Restart game after config changes.");
         }

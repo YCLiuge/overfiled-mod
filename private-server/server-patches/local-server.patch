@@ -11,10 +11,22 @@ index 7bf7e4c..d03ca9c 100644
  	MsgChanSize int  `json:"MsgChanSize"`
  }
 diff --git a/db/of_basic.go b/db/of_basic.go
-index 55ca7e2..3dc34fc 100644
+index 55ca7e2..255480f 100644
 --- a/db/of_basic.go
 +++ b/db/of_basic.go
-@@ -15,12 +15,13 @@ var (
+@@ -2,8 +2,11 @@ package db
+ 
+ import (
+ 	"errors"
++	"strconv"
+ 	"time"
+ 
++	"gorm.io/plugin/dbresolver"
++
+ 	"gucooing/lolo/pkg/cache"
+ 	"gucooing/lolo/protocol/proto"
+ )
+@@ -15,12 +18,13 @@ var (
  type OFGameBasic struct {
  	UserId          uint32            `gorm:"primaryKey;not null;index"`
  	NickName        string            //  `gorm:"default:'gucooing'"`
@@ -29,6 +41,47 @@ index 55ca7e2..3dc34fc 100644
  	Sign            string            `gorm:"default:'Lolo-完全免费的开源社交游戏服务端实现'"` // 签名
  	CreatedAt       time.Time         `gorm:"autoCreateTime"`
  	UpdatedAt       time.Time         `gorm:"autoUpdateTime"`
+@@ -35,15 +39,34 @@ type OFGameBasic struct {
+ }
+ 
+ func GetGameBasicOrCreate(userId uint32) (*OFGameBasic, error) {
+-	if basic, ok := basicCache.Get(userId); ok {
++	basic, cached := basicCache.Get(userId)
++	if cached && basic.NickName != "" {
+ 		return basic, nil
+ 	}
+-	basic := &OFGameBasic{
+-		UserId: userId,
++	defaultName := "旅行者" + strconv.FormatUint(uint64(userId), 10)
++	if !cached {
++		basic = &OFGameBasic{UserId: userId}
++		if err := db.Clauses(dbresolver.Write).
++			Attrs(OFGameBasic{NickName: defaultName}).FirstOrCreate(basic).Error; err != nil {
++			return nil, err
++		}
+ 	}
+-	err := db.FirstOrCreate(basic).Error
+-	if err != nil {
+-		return nil, err
++	if basic.NickName == "" {
++		// Only fill an empty name; never overwrite a concurrent player rename or
++		// save other fields from a potentially stale shared cache entry.
++		if err := db.Model(&OFGameBasic{}).Where("user_id = ? AND (nick_name = ? OR nick_name IS NULL)", userId, "").
++			UpdateColumn("nick_name", defaultName).Error; err != nil {
++			return nil, err
++		}
++		// Read the winner from the primary, even when the conditional update
++		// affected no rows. Do not mutate the cached pointer before persistence.
++		basic = &OFGameBasic{UserId: userId}
++		if err := db.Clauses(dbresolver.Write).First(basic).Error; err != nil {
++			return nil, err
++		}
++		if basic.NickName == "" {
++			return nil, errors.New("玩家默认昵称保存后仍为空")
++		}
+ 	}
+ 	basicCache.Set(userId, basic)
+ 	return basic, nil
 diff --git a/db/of_chat.go b/db/of_chat.go
 index c35c7ba..0246346 100644
 --- a/db/of_chat.go
@@ -456,7 +509,7 @@ index 47aa9c8..fed44f3 100644
 +	return result
  }
 diff --git a/game/game_router.go b/game/game_router.go
-index ffb552d..323f2f8 100644
+index ffb552d..78bad1e 100644
 --- a/game/game_router.go
 +++ b/game/game_router.go
 @@ -19,13 +19,19 @@ func (g *Game) newRouter() {
@@ -506,7 +559,7 @@ index ffb552d..323f2f8 100644
  		cmd.OutfitDyeReq:                    g.OutfitDye,                    // 染色请求
  		cmd.OutFitDyeSaveReq:                g.OutFitDyeSave,                // 保存染色结果
  		cmd.CharacterEquipUpdateReq:         g.CharacterEquipUpdate,         // 角色更新装备
-@@ -132,30 +140,40 @@ func (g *Game) newRouter() {
+@@ -132,30 +140,44 @@ func (g *Game) newRouter() {
  		cmd.GetPetReq:    g.GetPetReq, // 获取宠物列表
  		cmd.ChangePetReq: g.ChangePet, // 宠物携带
  
@@ -543,6 +596,9 @@ index ffb552d..323f2f8 100644
 +		cmd.TutorialReq:                         g.Tutorial, // 开始教程
 +		cmd.ChallengeFriendRankReq:              g.ChallengeFriendRank,
 +		cmd.AbilityBadgeListReq:                 g.AbilityBadgeList,
++		cmd.AbilityBadgePageBoxActiveReq:        g.AbilityBadgePageBoxActive,
++		cmd.AbilityBadgePageRewardReq:           g.AbilityBadgePageReward,
++		cmd.AbilityBadgeAchieveRewardReq:        g.AbilityBadgeAchieveReward,
 +		cmd.SceneProcessListReq:                 g.SceneProcessList,
 +		cmd.WishListByFriendIdReq:               g.WishListByFriendId,
 +		cmd.GetLifeInfoReq:                      g.GetLifeInfo,
@@ -559,8 +615,9 @@ index ffb552d..323f2f8 100644
 +		cmd.GetAchieveGroupListReq:              g.GetAchieveGroupList,
 +		cmd.GenericGameAReq:                     g.GenericGameA,
 +		cmd.GenericGameBReq:                     g.GenericGameB,
-+		cmd.ManualListReq:                       g.ManualList,            // 获取手册列表
-+		cmd.PlayerAbilityListReq:                g.PlayerAbilityList,     //
++		cmd.ManualListReq:                       g.ManualList,        // 获取手册列表
++		cmd.PlayerAbilityListReq:                g.PlayerAbilityList, //
++		cmd.PlayerAbilityLevelUpReq:             g.PlayerAbilityLevelUp,
 +		cmd.WorldLevelAchieveListReq:            g.WorldLevelAchieveList, //
 +		cmd.SupplyBoxInfoReq:                    g.SupplyBoxInfo,         //
 +		cmd.GetAllCharacterEquipReq:             g.GetAllCharacterEquip,  //
@@ -571,7 +628,7 @@ index ffb552d..323f2f8 100644
  	}
  }
  
-@@ -164,11 +182,6 @@ func (g *Game) routeHandle(conn ofnet.Conn, userId uint32, uuid string, msg *alg
+@@ -164,11 +186,6 @@ func (g *Game) routeHandle(conn ofnet.Conn, userId uint32, uuid string, msg *alg
  		g.PlayerLogin(conn, userId, uuid, msg)
  		return
  	}
@@ -583,7 +640,7 @@ index ffb552d..323f2f8 100644
  	player := g.GetUser(userId)
  	if player == nil {
  		log.Game.Debugf("player is nil, userId: %v", userId)
-@@ -181,6 +194,12 @@ func (g *Game) routeHandle(conn ofnet.Conn, userId uint32, uuid string, msg *alg
+@@ -181,6 +198,12 @@ func (g *Game) routeHandle(conn ofnet.Conn, userId uint32, uuid string, msg *alg
  	if player.NetFreeze || player.LoginUUID != uuid { // 玩家冻结或脏数据过滤
  		return
  	}
@@ -636,10 +693,9 @@ index 93a7a35..f4d7be5 100644
  func DefaultChatModel() *ChatModel {
 diff --git a/game/model/dye.go b/game/model/dye.go
 new file mode 100644
-index 0000000..b50f684
 --- /dev/null
 +++ b/game/model/dye.go
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,209 @@
 +package model
 +
 +import (
@@ -653,6 +709,23 @@ index 0000000..b50f684
 +
 +// These are sandbox safety limits, not reconstructed official unlock rules.
 +const SandboxDyeSchemeLimit uint32 = 10
++
++// The current client displays five slots. Keep the wider historical validation
++// bound above so old saved schemes are not removed by this additive migration.
++const SandboxVisibleDyeSchemeCount uint32 = 5
++
++func (f *ItemFashionInfo) unlockSandboxDyeSchemes() {
++	if f.DyeSchemes == nil {
++		f.DyeSchemes = make(map[uint32]*OutfitDyeScheme)
++	}
++	for index := uint32(0); index < SandboxVisibleDyeSchemeCount; index++ {
++		if f.DyeSchemes[index] == nil {
++			f.DyeSchemes[index] = &OutfitDyeScheme{SchemeIndex: index}
++		}
++		f.DyeSchemes[index].IsUnLock = true
++	}
++}
++
 +const SandboxDyePositionLimit uint32 = 16
 +
 +var ErrDyeInvalid = errors.New("invalid or unsupported dye operation")
@@ -1812,10 +1885,31 @@ index 0000000..d510826
 +	return records[start:end], total, nil
 +}
 diff --git a/game/model/item.go b/game/model/item.go
-index 7d01c46..ad67b87 100644
+index 7d01c46..11d1278 100644
 --- a/game/model/item.go
 +++ b/game/model/item.go
-@@ -988,6 +988,7 @@ func (i *ItemHeadInfo) ItemDetail() *proto.ItemDetail {
+@@ -4,6 +4,7 @@ import (
+ 	"errors"
+ 	"fmt"
+ 	"math/rand/v2"
++	"sort"
+ 	"sync"
+ 	"time"
+ 
+@@ -541,8 +542,11 @@ func (f *ItemFashionInfo) ItemDetail() *proto.ItemDetail {
+ 					DyeSchemes: func() []*proto.OutfitDyeScheme {
+ 						list := make([]*proto.OutfitDyeScheme, 0)
+ 						for _, d := range f.DyeSchemes {
+-							alg.AddList(&list, d.OutfitDyeScheme())
++							if d != nil {
++								alg.AddList(&list, d.OutfitDyeScheme())
++							}
+ 						}
++						sort.Slice(list, func(i, j int) bool { return list[i].SchemeIndex < list[j].SchemeIndex })
+ 						return list
+ 					}(),
+ 				},
+@@ -988,6 +992,7 @@ func (i *ItemHeadInfo) ItemDetail() *proto.ItemDetail {
  			Item: &proto.ItemInfo_BaseItem{
  				BaseItem: &proto.BaseItem{
  					ItemId: i.HeadId,
@@ -2229,10 +2323,9 @@ index 0000000..4b52282
 +}
 diff --git a/game/model/sandbox.go b/game/model/sandbox.go
 new file mode 100644
-index 0000000..50d194d
 --- /dev/null
 +++ b/game/model/sandbox.go
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,55 @@
 +package model
 +
 +import (
@@ -2269,6 +2362,7 @@ index 0000000..50d194d
 +	}
 +	s.ApplySandboxAppearance()
 +	s.ApplySandboxAppearanceExtras()
++	s.ApplySandboxAbilities()
 +	for _, c := range gdconf.GetAllItemConfigure() {
 +		if c == nil || c.ID <= 0 {
 +			continue
@@ -2289,10 +2383,9 @@ index 0000000..50d194d
 +}
 diff --git a/game/model/sandbox_appearance.go b/game/model/sandbox_appearance.go
 new file mode 100644
-index 0000000..4db4690
 --- /dev/null
 +++ b/game/model/sandbox_appearance.go
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,58 @@
 +package model
 +
 +import (
@@ -2312,7 +2405,9 @@ index 0000000..4db4690
 +		if item == nil || proto.EBagItemTag(item.NewBagItemTag) != proto.EBagItemTag_EBagItemTag_Fashion {
 +			continue
 +		}
-+		s.GetItemModel().AddItemFashion(id)
++		if fashion := s.GetItemModel().AddItemFashion(id); fashion != nil {
++			fashion.unlockSandboxDyeSchemes()
++		}
 +	}
 +	// Default chat stickers do not necessarily have corresponding Item records.
 +	for id, c := range gdconf.GetChatEmotionMap() {
@@ -2351,7 +2446,6 @@ index 0000000..4db4690
 +}
 diff --git a/game/model/sandbox_appearance_extras.go b/game/model/sandbox_appearance_extras.go
 new file mode 100644
-index 0000000..aba76ae
 --- /dev/null
 +++ b/game/model/sandbox_appearance_extras.go
 @@ -0,0 +1,112 @@
@@ -2413,7 +2507,7 @@ index 0000000..aba76ae
 +			maxID = id
 +		}
 +	}
-+	for _, category := range []string{"collectionGloves", "loggingAxe", "miningHammer", "insectNet", "waterBottle", "fishingRod", "vehicle", "shovel"} {
++	for _, category := range []string{"unarmed", "collectionGloves", "loggingAxe", "miningHammer", "insectNet", "waterBottle", "fishingRod", "vehicle", "shovel"} {
 +		for _, id := range a.Categories[category] {
 +			if owned[id] || maxID == math.MaxUint32 {
 +				continue
@@ -3199,7 +3293,7 @@ index a6983d1..2ec06f5 100644
 +	return err
 +}
 diff --git a/game/player_basic.go b/game/player_basic.go
-index 5b461fb..8db23dc 100644
+index 5b461fb..a36a134 100644
 --- a/game/player_basic.go
 +++ b/game/player_basic.go
 @@ -7,6 +7,7 @@ import (
@@ -3232,7 +3326,7 @@ index 5b461fb..8db23dc 100644
  			return
  		}
  	}
-@@ -90,13 +97,15 @@ login:
+@@ -90,13 +97,17 @@ login:
  		rsp.Status = proto.StatusCode_StatusCode_PLAYER_NOT_FOUND
  		return
  	}
@@ -3240,6 +3334,8 @@ index 5b461fb..8db23dc 100644
 -		g.send(s, msg.PacketId, rsp)
 -		if rsp.IsReconnect {
 -			g.loginGame(s)
++	// 基础资料中的昵称是唯一来源，避免旧存档中的空昵称覆盖登录补齐结果。
++	s.NickName = basic.NickName
 +	if config.GetGame().Sandbox {
 +		if err := applySandboxAccountLevel(userId); err != nil {
 +			log.Game.Errorf("UserId:%v 沙盒等级保存失败:%s", userId, err.Error())
@@ -3254,7 +3350,7 @@ index 5b461fb..8db23dc 100644
  	// pack
  	{
  		rsp.ClientSeqId = msg.SeqId
-@@ -138,7 +147,9 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
+@@ -138,7 +149,9 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
  	}
  	defer func() {
  		g.send(s, msg.PacketId, rsp)
@@ -3265,7 +3361,7 @@ index 5b461fb..8db23dc 100644
  	}()
  	// 基础信息
  	{
-@@ -158,7 +169,11 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
+@@ -158,7 +171,11 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
  		rsp.CreateTime = uint32(s.Created.Unix())
  		rsp.Birthday = basic.Birthday
  		rsp.IsHideBirthday = basic.IsHideBirthday
@@ -3277,7 +3373,7 @@ index 5b461fb..8db23dc 100644
  		rsp.Appearance = model.GetPlayerAppearance(s.UserId)
  		rsp.WorldLevel = s.GetSceneModel().GetWorldLevel()
  		rsp.MonthCardOverDueTime = 0
-@@ -191,6 +206,8 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
+@@ -191,6 +208,8 @@ func (g *Game) PlayerMainData(s *model.Player, msg *alg.GameMsg) {
  	// 其他
  	{
  		rsp.PlayerDropRateInfo = s.GetPbPlayerDropRateInfo()
@@ -3286,7 +3382,7 @@ index 5b461fb..8db23dc 100644
  		rsp.QuestDetail = s.GetQuestDetail()
  		rsp.QuestionnaireInfo = s.GetPlayerQuestionnaireInfo()
  		rsp.UnlockFunctions = s.GetUnlockFunctions()
-@@ -209,12 +226,17 @@ func (g *Game) loginGame(s *model.Player) {
+@@ -209,12 +228,17 @@ func (g *Game) loginGame(s *model.Player) {
  	g.GatherSceneLimitRecoveryNotice(s)
  	// 物品
  	g.AllPackNotice(s)
@@ -3304,7 +3400,7 @@ index 5b461fb..8db23dc 100644
  	g.send(s, 0, &proto.GmNotice{
  		Status: proto.StatusCode_StatusCode_OK,
  		Notice: alg.ProjectNotice,
-@@ -258,33 +280,53 @@ func (g *Game) ChangeNickName(s *model.Player, msg *alg.GameMsg) {
+@@ -258,33 +282,53 @@ func (g *Game) ChangeNickName(s *model.Player, msg *alg.GameMsg) {
  }
  
  func (g *Game) UnlockHeadList(s *model.Player, msg *alg.GameMsg) {
@@ -3372,7 +3468,7 @@ index 5b461fb..8db23dc 100644
  }
  
  func (g *Game) ChangePhoneBackground(s *model.Player, msg *alg.GameMsg) {
-@@ -370,7 +412,20 @@ func (g *Game) GamePlayReward(s *model.Player, msg *alg.GameMsg) {
+@@ -370,7 +414,20 @@ func (g *Game) GamePlayReward(s *model.Player, msg *alg.GameMsg) {
  }
  
  func (g *Game) AcceptQuest(s *model.Player, msg *alg.GameMsg) {
@@ -3394,7 +3490,7 @@ index 5b461fb..8db23dc 100644
  	rsp := &proto.AcceptQuestRsp{
  		Status: proto.StatusCode_StatusCode_OK,
  		Quest: &proto.Quest{
-@@ -502,13 +557,6 @@ func (g *Game) PlayerVitality(s *model.Player, msg *alg.GameMsg) {
+@@ -502,13 +559,6 @@ func (g *Game) PlayerVitality(s *model.Player, msg *alg.GameMsg) {
  }
  
  func (g *Game) TreasureIllustrationInfo(s *model.Player, msg *alg.GameMsg) {
@@ -5378,10 +5474,9 @@ index 0000000..1d856a5
 +}
 diff --git a/gdconf/excel.AppearanceExtras.go b/gdconf/excel.AppearanceExtras.go
 new file mode 100644
-index 0000000..5aea474
 --- /dev/null
 +++ b/gdconf/excel.AppearanceExtras.go
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,139 @@
 +package gdconf
 +
 +import (
@@ -5401,6 +5496,8 @@ index 0000000..5aea474
 +
 +func AppearanceExtraWeaponCategory(t proto.EWeaponType) string {
 +	switch t {
++	case proto.EWeaponType_EWeaponType_Unarmed:
++		return "unarmed"
 +	case proto.EWeaponType_EWeaponType_CollectionGloves:
 +		return "collectionGloves"
 +	case proto.EWeaponType_EWeaponType_LoggingAxe:
@@ -6266,3 +6363,1191 @@ index 4869ebe..cb83d89 100644
 -	}
 +	return &proto.PlayerQuestionnaireInfo{ToFill: make([]*proto.QuestionnaireBrief, 0)}
  }
+diff --git a/db/of_friend.go b/db/of_friend.go
+index 3214c43..8fd1176 100644
+--- a/db/of_friend.go
++++ b/db/of_friend.go
+@@ -6,6 +6,7 @@ import (
+ 	"time"
+ 
+ 	"gorm.io/gorm"
++	"gorm.io/gorm/clause"
+ )
+ 
+ // 好友配置表
+@@ -56,7 +57,7 @@ recipientId - 接收人
+ */
+ func GetIsFriendApply(requestUserId, recipientId uint32) (int64, error) {
+ 	var count int64
+-	err := db.Model(&OFFriend{}).Where("user_id = ? AND friend_id = ?", requestUserId, recipientId).Count(&count).Error
++	err := db.Model(&OFFriend{}).Where("user_id = ? AND friend_id = ? AND status = ?", requestUserId, recipientId, proto.FriendStatus_FriendStatus_APPLY).Count(&count).Error
+ 	return count, err
+ }
+ 
+@@ -78,7 +79,7 @@ func CreateFriendApply(requestUserId, recipientId uint32) error {
+ requestUserId - 发起人
+ recipientId - 接收人
+ */
+-func FriendHandleApply(recipientId, requestUserId uint32, isAgree bool) error {
++func FriendHandleApply(requestUserId, recipientId uint32, isAgree bool) error {
+ 	return db.Transaction(func(tx *gorm.DB) error {
+ 		// 获取是否存在该申请
+ 		request := &OFFriend{}
+@@ -89,12 +90,22 @@ func FriendHandleApply(recipientId, requestUserId uint32, isAgree bool) error {
+ 			return err
+ 		}
+ 		if isAgree {
++			var blocked int64
++			if err := tx.Model(&OFFriendBlack{}).Where("(user_id = ? AND black_id = ?) OR (user_id = ? AND black_id = ?)", requestUserId, recipientId, recipientId, requestUserId).Count(&blocked).Error; err != nil {
++				return err
++			}
++			if blocked != 0 {
++				return errors.New("friend blocked")
++			}
+ 			// 同意好友
+ 			request.Status = proto.FriendStatus_FriendStatus_FRIEND
+ 			if err := tx.Save(request).Error; err != nil {
+ 				return err
+ 			}
+-			if err := tx.Create(&OFFriend{
++			if err := tx.Clauses(clause.OnConflict{
++				Columns:   []clause.Column{{Name: "user_id"}, {Name: "friend_id"}},
++				DoUpdates: clause.AssignmentColumns([]string{"status"}),
++			}).Create(&OFFriend{
+ 				UserId:   request.FriendId,
+ 				FriendId: request.UserId,
+ 				Status:   proto.FriendStatus_FriendStatus_FRIEND,
+@@ -134,12 +145,39 @@ func GetFiend(userId, friendId uint32) (*OFFriend, error) {
+ 	return off, err
+ }
+ 
++// 获取资料页展示的关系，包括已发送/收到的申请和单独保存的黑名单。
++func GetFriendRelation(userId, friendId uint32) (*OFFriend, error) {
++	blocked, err := IsUserBlack(userId, friendId)
++	if err != nil {
++		return nil, err
++	}
++	if blocked {
++		return &OFFriend{UserId: userId, FriendId: friendId, Status: proto.FriendStatus_FriendStatus_BLACK}, nil
++	}
++	row := &OFFriend{}
++	err = db.Where("user_id = ? AND friend_id = ?", userId, friendId).First(row).Error
++	if err == nil {
++		return row, nil
++	}
++	if !errors.Is(err, gorm.ErrRecordNotFound) {
++		return nil, err
++	}
++	err = db.Where("user_id = ? AND friend_id = ? AND status = ?", friendId, userId, proto.FriendStatus_FriendStatus_APPLY).First(row).Error
++	if errors.Is(err, gorm.ErrRecordNotFound) {
++		return nil, nil
++	}
++	return row, err
++}
++
+ // 单向更新好友关系
+ func UpOFFriend(userId, friendId uint32, fx func(off *OFFriend) bool) error {
+ 	off, err := GetFiend(userId, friendId)
+ 	if err != nil {
+ 		return err
+ 	}
++	if off == nil {
++		return gorm.ErrRecordNotFound
++	}
+ 	if !fx(off) {
+ 		return nil
+ 	}
+@@ -152,15 +190,7 @@ func UpOFFriend(userId, friendId uint32, fx func(off *OFFriend) bool) error {
+ // 删除好友关系
+ func DelFiend(userId, friendId uint32) error {
+ 	return db.Transaction(func(tx *gorm.DB) error {
+-		tx.Delete(&OFFriend{
+-			UserId:   userId,
+-			FriendId: friendId,
+-		})
+-		tx.Delete(&OFFriend{
+-			UserId:   friendId,
+-			FriendId: friendId,
+-		})
+-		return tx.Error
++		return tx.Where("(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", userId, friendId, friendId, userId).Delete(&OFFriend{}).Error
+ 	})
+ }
+ 
+@@ -175,26 +205,21 @@ type OFFriendBlack struct {
+ // 拉黑玩家
+ func CreateFriendBlack(userId, blackId uint32, isRemove bool) error {
+ 	return db.Transaction(func(tx *gorm.DB) error {
+-		if err := tx.Create(&OFFriendBlack{
++		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&OFFriendBlack{
+ 			UserId:  userId,
+ 			BlackId: blackId,
+ 		}).Error; err != nil {
+ 			return err
+ 		}
++		pair := "(user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)"
+ 		if isRemove {
+-			tx.Delete(&OFFriend{
+-				UserId:   userId,
+-				FriendId: blackId,
+-			})
+-			tx.Delete(&OFFriend{
+-				UserId:   blackId,
+-				FriendId: userId,
+-			})
+-		} else {
+-			tx.Where("user_id = ? AND friend_id = ?", userId, blackId).
+-				Update("status", proto.FriendStatus_FriendStatus_BLACK)
++			return tx.Where(pair, userId, blackId, blackId, userId).Delete(&OFFriend{}).Error
++		}
++		if err := tx.Where("("+pair+") AND status = ?", userId, blackId, blackId, userId, proto.FriendStatus_FriendStatus_APPLY).Delete(&OFFriend{}).Error; err != nil {
++			return err
+ 		}
+-		return tx.Error
++		return tx.Model(&OFFriend{}).Where("user_id = ? AND friend_id = ?", userId, blackId).
++			Update("status", proto.FriendStatus_FriendStatus_BLACK).Error
+ 	})
+ }
+ 
+diff --git a/game/player_friend.go b/game/player_friend.go
+index faddbd8..23f2130 100644
+--- a/game/player_friend.go
++++ b/game/player_friend.go
+@@ -16,93 +16,126 @@ func (g *Game) Friend(s *model.Player, msg *alg.GameMsg) {
+ 	}
+ 	defer g.send(s, msg.PacketId, rsp)
+ 
+-	var friendStatus proto.FriendStatus
++	var list []*db.OFFriend
++	var err error
+ 	switch req.Type {
+-	case proto.FriendListType_FriendListType_NONE:
+-		friendStatus = proto.FriendStatus_FriendStatus_NONE
+ 	case proto.FriendListType_FriendListType_APPLY:
+-		friendStatus = proto.FriendStatus_FriendStatus_APPLY
++		// 申请列表展示收到的申请；关系记录中的 UserId 才是申请者。
++		list, err = db.GetAllFriendApply(s.UserId)
+ 	case proto.FriendListType_FriendListType_FRIEND:
+-		friendStatus = proto.FriendStatus_FriendStatus_FRIEND
++		list, err = db.GetAllFiend(s.UserId)
+ 	case proto.FriendListType_FriendListType_BLACK:
+-		friendStatus = proto.FriendStatus_FriendStatus_BLACK
++		var black []*db.OFFriendBlack
++		black, err = db.GetAllFriendBlack(s.UserId)
++		for _, row := range black {
++			if info := g.GetFriendBriefInfo(row.BlackId, nil); info != nil {
++				rsp.Info = append(rsp.Info, info)
++			}
++		}
++	case proto.FriendListType_FriendListType_NONE:
++		return
++	default:
++		rsp.Status = proto.StatusCode_StatusCode_BAD_REQ
++		return
+ 	}
+-
+-	friendList, err := db.GetAllFriendByStatus(s.UserId, friendStatus)
+ 	if err != nil {
+-		log.Game.Warnf("UserId:%v func db.GetAllFriendByStatus:%v", s.UserId, err)
++		rsp.Status = proto.StatusCode_StatusCode_FAIL
++		log.Game.Warnf("UserId:%v friend list: %v", s.UserId, err)
++		return
+ 	}
+-	for _, v := range friendList {
+-		alg.AddList(&rsp.Info, g.GetFriendBriefInfo(v.FriendId, v))
++	for _, row := range list {
++		id := row.FriendId
++		if req.Type == proto.FriendListType_FriendListType_APPLY {
++			id = row.UserId
++		}
++		if info := g.GetFriendBriefInfo(id, row); info != nil {
++			rsp.Info = append(rsp.Info, info)
++		}
++	}
++}
++
++func (g *Game) notifyFriendPair(s *model.Player, target uint32, kind proto.FriendHandleType) {
++	g.send(s, 0, &proto.FriendHandleNotice{Status: proto.StatusCode_StatusCode_OK, Type: kind, TargetPlayerId: target})
++	if friend := g.GetUser(target); friend != nil {
++		g.send(friend, 0, &proto.FriendHandleNotice{Status: proto.StatusCode_StatusCode_OK, Type: kind, TargetPlayerId: s.UserId})
+ 	}
+ }
+ 
+ func (g *Game) FriendAdd(s *model.Player, msg *alg.GameMsg) {
+ 	req := msg.Body.(*proto.FriendAddReq)
+-	rsp := &proto.FriendAddRsp{
+-		Status: proto.StatusCode_StatusCode_OK,
+-	}
++	rsp := &proto.FriendAddRsp{Status: proto.StatusCode_StatusCode_FRIEND_ADD_FAIL}
+ 	defer g.send(s, msg.PacketId, rsp)
+-	// 判断是否被拉黑
+-	if ok, err := db.IsUserBlack(s.UserId, req.PlayerId); err != nil {
+-		log.Game.Warnf("UserId:%v db.IsUserBlack:%v", s.UserId, err)
++	if req.PlayerId == 0 || req.PlayerId == s.UserId {
++		rsp.Status = proto.StatusCode_StatusCode_BAD_REQ
+ 		return
+-	} else if ok {
+-		rsp.Status = proto.StatusCode_StatusCode_FRIEND_BLACK
++	}
++	if _, ok := db.GetGameBasic(req.PlayerId); !ok {
++		rsp.Status = proto.StatusCode_StatusCode_FRIEND_NOT_EXIST
+ 		return
+ 	}
+-	// 判断是否存在好友关系
+-	if conn, err := db.GetIsFiend(s.UserId, req.PlayerId); err != nil {
+-		log.Game.Warnf("UserId:%v db.GetIsFiend:%v", s.UserId, err)
++	// 双向检查黑名单，既不能向被自己拉黑的人申请，也不能绕过对方拉黑。
++	for _, pair := range [][2]uint32{{s.UserId, req.PlayerId}, {req.PlayerId, s.UserId}} {
++		blocked, err := db.IsUserBlack(pair[0], pair[1])
++		if err != nil {
++			return
++		}
++		if blocked {
++			rsp.Status = proto.StatusCode_StatusCode_FRIEND_BLACK
++			return
++		}
++	}
++	count, err := db.GetIsFiend(s.UserId, req.PlayerId)
++	if err != nil {
+ 		return
+-	} else if conn != 0 {
+-		rsp.Status = proto.StatusCode_StatusCode_FRIEND_ADD_FAIL
++	}
++	if count != 0 {
++		rsp.Status = proto.StatusCode_StatusCode_FRIEND_EXIST
+ 		return
+ 	}
+-	// 判断是否已经申请
+-	if conn, err := db.GetIsFriendApply(req.PlayerId, s.UserId); err != nil {
+-		log.Game.Warnf("UserId:%v db.GetIsFriendApply:%v", s.UserId, err)
++	incoming, err := db.GetIsFriendApply(req.PlayerId, s.UserId)
++	if err != nil {
+ 		return
+-	} else if conn != 0 {
+-		// 直接同意好友申请
+-		err = db.FriendHandleApply(req.PlayerId, s.UserId, true)
++	}
++	if incoming != 0 {
++		if err = db.FriendHandleApply(req.PlayerId, s.UserId, true); err != nil {
++			return
++		}
++		rsp.Status = proto.StatusCode_StatusCode_OK
++		g.notifyFriendPair(s, req.PlayerId, proto.FriendHandleType_FriendHandleType_ADD)
+ 		return
+ 	}
+-	// 都没有就写入申请请求
+-	err := db.CreateFriendApply(s.UserId, req.PlayerId)
++	pending, err := db.GetIsFriendApply(s.UserId, req.PlayerId)
+ 	if err != nil {
+-		rsp.Status = proto.StatusCode_StatusCode_FRIEND_ADD_FAIL
++		return
++	}
++	if pending != 0 {
++		rsp.Status = proto.StatusCode_StatusCode_FRIEND_APPLY_EXIST
++		return
++	}
++	if err = db.CreateFriendApply(s.UserId, req.PlayerId); err != nil {
+ 		log.Game.Warnf("UserId:%v db.CreateFriendApply:%v", s.UserId, err)
+ 		return
+ 	}
+-	// 如果在线通知对方
++	rsp.Status = proto.StatusCode_StatusCode_OK
+ 	if friend := g.GetUser(req.PlayerId); friend != nil {
+-		g.send(friend, 0, &proto.FriendHandleNotice{
+-			Status:         proto.StatusCode_StatusCode_OK,
+-			Type:           proto.FriendHandleType_FriendHandleType_APPLY,
+-			TargetPlayerId: s.UserId,
+-		})
++		g.send(friend, 0, &proto.FriendHandleNotice{Status: proto.StatusCode_StatusCode_OK, Type: proto.FriendHandleType_FriendHandleType_APPLY, TargetPlayerId: s.UserId})
+ 	}
+ }
+ 
+ func (g *Game) FriendHandle(s *model.Player, msg *alg.GameMsg) {
+ 	req := msg.Body.(*proto.FriendHandleReq)
+-	rsp := &proto.FriendHandleRsp{
+-		Status: proto.StatusCode_StatusCode_OK,
+-	}
++	rsp := &proto.FriendHandleRsp{Status: proto.StatusCode_StatusCode_FRIEND_NOT_APPLY}
+ 	defer g.send(s, msg.PacketId, rsp)
+-	err := db.FriendHandleApply(req.PlayerId, s.UserId, req.IsAgree)
+-	if err != nil {
+-		rsp.Status = proto.StatusCode_StatusCode_FRIEND_NOT_APPLY
+-		log.Game.Warnf("UserId:%v func db.FriendHandleApply:%v", s.UserId, err)
++	if req.PlayerId == 0 || req.PlayerId == s.UserId {
++		return
+ 	}
+-	// 如果在线通知对方
+-	if friend := g.GetUser(req.PlayerId); friend != nil && req.IsAgree {
+-		g.send(friend, 0, &proto.FriendHandleNotice{
+-			Status:         proto.StatusCode_StatusCode_OK,
+-			Type:           proto.FriendHandleType_FriendHandleType_ADD,
+-			TargetPlayerId: s.UserId,
+-		})
++	if err := db.FriendHandleApply(req.PlayerId, s.UserId, req.IsAgree); err != nil {
++		log.Game.Warnf("UserId:%v db.FriendHandleApply:%v", s.UserId, err)
++		return
++	}
++	rsp.Status = proto.StatusCode_StatusCode_OK
++	if req.IsAgree {
++		g.notifyFriendPair(s, req.PlayerId, proto.FriendHandleType_FriendHandleType_ADD)
+ 	}
+ }
+ 
+@@ -116,6 +149,8 @@ func (g *Game) FriendDel(s *model.Player, msg *alg.GameMsg) {
+ 	err := db.DelFiend(s.UserId, req.PlayerId)
+ 	if err != nil {
+ 		log.Game.Warnf("UserId:%v db.DelFiend:%v", s.UserId, err)
++		rsp.Status = proto.StatusCode_StatusCode_FAIL
++		return
+ 	}
+ 	// 如果在线通知对方
+ 	if friend := g.GetUser(req.PlayerId); friend != nil {
+@@ -136,6 +171,7 @@ func (g *Game) FriendBlack(s *model.Player, msg *alg.GameMsg) {
+ 	err := db.CreateFriendBlack(s.UserId, req.PlayerId, req.IsRemove)
+ 	if err != nil {
+ 		log.Game.Warnf("UserId:%v db.CreateFriendBlack:%v", s.UserId, err)
++		rsp.Status = proto.StatusCode_StatusCode_FAIL
+ 	}
+ }
+ 
+@@ -151,7 +187,7 @@ func (g *Game) OtherPlayerInfo(s *model.Player, msg *alg.GameMsg) {
+ 		FriendBackground: 0,
+ 	}
+ 	defer g.send(s, msg.PacketId, rsp)
+-	friend, err := db.GetFiend(s.UserId, req.PlayerId)
++	friend, err := db.GetFriendRelation(s.UserId, req.PlayerId)
+ 	if err != nil {
+ 		log.Game.Warnf("UserId:%v db.GetFiend:%v", s.UserId, err)
+ 		return
+@@ -180,7 +216,7 @@ func (g *Game) FriendSearch(s *model.Player, msg *alg.GameMsg) {
+ 	}
+ 	defer g.send(s, msg.PacketId, rsp)
+ 	userId := alg.S2U32(req.SearchArgs)
+-	friend, err := db.GetFiend(s.UserId, userId)
++	friend, err := db.GetFriendRelation(s.UserId, userId)
+ 	if err != nil {
+ 		rsp.Status = proto.StatusCode_StatusCode_FRIEND_NOT_EXIST
+ 		log.Game.Warnf("UserId:%v db.GetFiend:%v", s.UserId, err)
+diff --git a/gdconf/excel.Ability.go b/gdconf/excel.Ability.go
+index cdf87e0..86d358e 100644
+--- a/gdconf/excel.Ability.go
++++ b/gdconf/excel.Ability.go
+@@ -8,6 +8,7 @@ type Ability struct {
+ 	all            *excel.AllAbilityDatas
+ 	AbilityMap     map[uint32]*excel.AbilityConfigure
+ 	AbilityItemMap map[uint32]*excel.AbilityConfigure
++	MoonStone      *excel.AllMoonStoneDatas
+ }
+ 
+ func (g *GameConfig) loadAbility() {
+@@ -19,12 +20,26 @@ func (g *GameConfig) loadAbility() {
+ 	g.Excel.Ability = info
+ 	name := "Ability.json"
+ 	ReadJson(g.excelPath, name, &info.all)
++	info.MoonStone = new(excel.AllMoonStoneDatas)
++	ReadJson(g.excelPath, "MoonStone.json", &info.MoonStone)
+ 	for _, v := range info.all.GetAbility().GetDatas() {
+ 		info.AbilityMap[uint32(v.ID)] = v
+ 		info.AbilityItemMap[uint32(v.NeedItemID)] = v
+ 	}
+ }
+ 
++func GetMoonStone() *excel.AllMoonStoneDatas {
++	if cc == nil || cc.Excel == nil || cc.Excel.Ability == nil {
++		return nil
++	}
++	return cc.Excel.Ability.MoonStone
++}
++
++// GetAbilityMap exposes the configured star-tree nodes and their level rewards.
++func GetAbilityMap() map[uint32]*excel.AbilityConfigure {
++	return cc.Excel.Ability.AbilityMap
++}
++
+ func GetAbilityByItemId(itemId uint32) *excel.AbilityConfigure {
+ 	return cc.Excel.Ability.AbilityItemMap[itemId]
+ }
+diff --git a/game/model/sandbox_ability.go b/game/model/sandbox_ability.go
+new file mode 100644
+--- /dev/null
++++ b/game/model/sandbox_ability.go
+@@ -0,0 +1,101 @@
++package model
++
++import (
++	"sort"
++
++	"gucooing/lolo/gdconf"
++	"gucooing/lolo/protocol/excel"
++	"gucooing/lolo/protocol/proto"
++)
++
++// Star-tree ownership is stored as its native unlock and level-reward items.
++// These are ordinary quantities, so existing saves need no separate migration.
++func (s *Player) ApplySandboxAbilities() {
++	ensure := func(id int32) {
++		if id <= 0 || gdconf.GetItemConfigure(uint32(id)) == nil {
++			return
++		}
++		item := s.GetItemModel().GetItemBaseInfo(uint32(id))
++		if item == nil {
++			s.GetItemModel().AddItemBase(uint32(id), 1)
++		} else if item.Num < 1 {
++			item.Num = 1
++		}
++	}
++	for _, node := range gdconf.GetAbilityMap() {
++		if node == nil {
++			continue
++		}
++		ensure(node.NeedItemID)
++		for _, level := range node.LevelInfo {
++			if level != nil {
++				ensure(level.RewardItemID)
++			}
++		}
++	}
++}
++
++func abilityLevels(node *excel.AbilityConfigure) []*excel.LevelInfo {
++	levels := append([]*excel.LevelInfo(nil), node.LevelInfo...)
++	sort.Slice(levels, func(i, j int) bool { return levels[i].GetLevel() < levels[j].GetLevel() })
++	return levels
++}
++
++func (s *Player) ownsAbilityItem(id int32) bool {
++	if id <= 0 {
++		return false
++	}
++	item := s.GetItemModel().GetItemBaseInfo(uint32(id))
++	return item != nil && item.Num > 0
++}
++
++func (s *Player) PlayerAbility(id uint32) *proto.PlayerAbility {
++	node := gdconf.GetAbilityMap()[id]
++	if node == nil || !s.ownsAbilityItem(node.NeedItemID) {
++		return nil
++	}
++	info := &proto.PlayerAbility{AbilityId: id}
++	for _, level := range abilityLevels(node) {
++		if level == nil || !s.ownsAbilityItem(level.RewardItemID) {
++			break
++		}
++		info.Level = uint32(level.Level)
++	}
++	return info
++}
++
++func (s *Player) PlayerAbilities() []*proto.PlayerAbility {
++	list := make([]*proto.PlayerAbility, 0)
++	for id := range gdconf.GetAbilityMap() {
++		if info := s.PlayerAbility(id); info != nil {
++			list = append(list, info)
++		}
++	}
++	sort.Slice(list, func(i, j int) bool { return list[i].AbilityId < list[j].AbilityId })
++	return list
++}
++
++// Maxed nodes are idempotent: stale client upgrade requests never charge again.
++func (s *Player) LevelUpPlayerAbility(id uint32) (*proto.PlayerAbility, []*proto.ItemDetail, bool) {
++	info := s.PlayerAbility(id)
++	if info == nil {
++		return nil, nil, false
++	}
++	for _, level := range abilityLevels(gdconf.GetAbilityMap()[id]) {
++		if level == nil || uint32(level.Level) <= info.Level {
++			continue
++		}
++		if level.CostCount < 0 || level.CostItemID <= 0 || level.RewardItemID <= 0 || gdconf.GetItemConfigure(uint32(level.RewardItemID)) == nil {
++			return nil, nil, false
++		}
++		cost := s.GetItemModel().GetItemBaseInfo(uint32(level.CostItemID))
++		if cost == nil || cost.Num < int64(level.CostCount) {
++			return nil, nil, false
++		}
++		cost.Num -= int64(level.CostCount)
++		reward := s.GetItemModel().AddItemBase(uint32(level.RewardItemID), 1)
++		info.Level = uint32(level.Level)
++		return info, []*proto.ItemDetail{cost.ItemDetail(), reward.ItemDetail()}, true
++	}
++	return info, nil, true
++}
+diff --git a/game/player_ability.go b/game/player_ability.go
+index c3fe4ad..07a0046 100644
+--- a/game/player_ability.go
++++ b/game/player_ability.go
+@@ -1,25 +1,70 @@
+ package game
+ 
+ import (
++	"gucooing/lolo/config"
+ 	"gucooing/lolo/game/model"
+ 	"gucooing/lolo/pkg/alg"
+ 	"gucooing/lolo/protocol/proto"
+ )
+ 
+ func (g *Game) AbilityBadgeList(s *model.Player, msg *alg.GameMsg) {
+-	rsp := &proto.AbilityBadgeListRsp{
+-		Status:                       proto.StatusCode_StatusCode_OK,
+-		AbilityBadgePages:            make([]*proto.AbilityBadgePageInfo, 0),
+-		AbilityBadgeAchieves:         make([]*proto.Achieve, 0),
+-		AbilityBadgeRewardAchieveIds: make([]uint32, 0),
++	rsp := &proto.AbilityBadgeListRsp{Status: proto.StatusCode_StatusCode_BAD_REQ}
++	defer func() { g.send(s, msg.PacketId, rsp) }()
++	req, ok := msg.Body.(*proto.AbilityBadgeListReq)
++	if !ok || req == nil {
++		return
+ 	}
++	info, err := s.AbilityBadgeInfo(req.SceneId, config.GetGame().Sandbox)
++	if err == nil {
++		rsp = info
++	}
++}
++
++func (g *Game) AbilityBadgePageBoxActive(s *model.Player, msg *alg.GameMsg) {
++	rsp := &proto.AbilityBadgePageBoxActiveRsp{Status: proto.StatusCode_StatusCode_BAD_REQ}
+ 	defer g.send(s, msg.PacketId, rsp)
++	req, ok := msg.Body.(*proto.AbilityBadgePageBoxActiveReq)
++	if !ok || req == nil {
++		return
++	}
++	rsp.Page, rsp.BoxId = req.Page, req.BoxId
++	items, err := s.ActivateAbilityBadge(req.Page, req.BoxId, config.GetGame().Sandbox)
++	if err != nil {
++		return
++	}
++	rsp.Status, rsp.Items = proto.StatusCode_StatusCode_OK, items
++}
++
++// Resource snapshot lacks a verified page/achievement -> reward-pool mapping.
++// Respond explicitly instead of leaving the client waiting or granting an
++// unrelated pool with a coincidentally matching ID.
++func (g *Game) AbilityBadgePageReward(s *model.Player, msg *alg.GameMsg) {
++	rsp := &proto.AbilityBadgePageRewardRsp{Status: proto.StatusCode_StatusCode_BAD_REQ}
++	if req, ok := msg.Body.(*proto.AbilityBadgePageRewardReq); ok && req != nil {
++		rsp.Page = req.Page
++	}
++	g.send(s, msg.PacketId, rsp)
++}
++func (g *Game) AbilityBadgeAchieveReward(s *model.Player, msg *alg.GameMsg) {
++	g.send(s, msg.PacketId, &proto.AbilityBadgeAchieveRewardRsp{Status: proto.StatusCode_StatusCode_BAD_REQ})
++}
++
++func (g *Game) PlayerAbilityLevelUp(s *model.Player, msg *alg.GameMsg) {
++	req := msg.Body.(*proto.PlayerAbilityLevelUpReq)
++	rsp := &proto.PlayerAbilityLevelUpRsp{Status: proto.StatusCode_StatusCode_BAD_REQ}
++	defer g.send(s, msg.PacketId, rsp)
++	ability, items, ok := s.LevelUpPlayerAbility(req.AbilityId)
++	if !ok {
++		return
++	}
++	rsp.Status = proto.StatusCode_StatusCode_OK
++	rsp.Ability, rsp.Items = ability, items
+ }
+ 
+ func (g *Game) PlayerAbilityList(s *model.Player, msg *alg.GameMsg) {
+ 	rsp := &proto.PlayerAbilityListRsp{
+ 		Status:      proto.StatusCode_StatusCode_OK,
+-		AbilityList: make([]*proto.PlayerAbility, 0),
++		AbilityList: s.PlayerAbilities(),
+ 	}
+ 	defer g.send(s, msg.PacketId, rsp)
+ }
+diff --git a/sdk/login.go b/sdk/login.go
+new file mode 100644
+--- /dev/null
++++ b/sdk/login.go
+@@ -0,0 +1,64 @@
++package sdk
++
++import (
++	"errors"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++	"gucooing/lolo/db"
++	"gucooing/lolo/pkg/alg"
++	"gucooing/lolo/protocol/quick"
++)
++
++func (s *Server) passwordLogin(username, password string) (*db.OFQuick, error) {
++	if strings.TrimSpace(username) == "" {
++		return nil, errors.New("请输入账号")
++	}
++	if strings.TrimSpace(password) == "" {
++		return nil, errors.New("请输入密码")
++	}
++	user, err := db.OrCreateOFQuick(username, password)
++	if err != nil {
++		return nil, errors.New("账号读取失败，请重试")
++	}
++	if user.Password != password {
++		return nil, errors.New("账号或密码错误")
++	}
++	return user, s.refreshLogin(user)
++}
++
++func (s *Server) refreshLogin(user *db.OFQuick) error {
++	auth, session := s.GenToken(user.ID^authXor), s.GenToken(user.ID)
++	if err := db.UpdateOFQuickTokens(user.ID, auth, session); err != nil {
++		return errors.New("登录状态保存失败，请重试")
++	}
++	user.AuthToken, user.UserToken = auth, session
++	return nil
++}
++
++// Different SDK generations send snake_case and camelCase respectively.
++func readAutoLoginToken(c *gin.Context) (string, error) {
++	var req struct {
++		quick.AutoLoginRequest
++		CamelToken string `json:"authToken"`
++	}
++	if err := alg.DecryptedData(c, &req); err != nil {
++		return "", err
++	}
++	if req.AuthToken != "" && req.CamelToken != "" && req.AuthToken != req.CamelToken {
++		return "", errors.New("conflicting tokens")
++	}
++	if req.AuthToken != "" {
++		return req.AuthToken, nil
++	}
++	return req.CamelToken, nil
++}
++
++func (s *Server) persistedAuthUser(token string) (*db.OFQuick, error) {
++	// Deliberately do not fall back to token.ID: old and current tokens both require exact DB ownership.
++	user, err := db.GetOFQuickByAuthToken(token)
++	if err != nil {
++		return nil, errors.New("自动登录已失效，请使用账号密码登录")
++	}
++	return user, nil
++}
+diff --git a/sdk/user_v1.go b/sdk/user_v1.go
+index d731411..9d024cf 100644
+--- a/sdk/user_v1.go
++++ b/sdk/user_v1.go
+@@ -53,21 +53,9 @@ func (s *Server) loginByNameV1(c *gin.Context) {
+ 		log.App.Debugf("gin req autoLogin error: %v", err)
+ 		return
+ 	}
+-	user, err := db.OrCreateOFQuick(req.Username, req.Password)
++	user, err := s.passwordLogin(req.Username, req.Password)
+ 	if err != nil {
+-		rsp.SetError("解密失败")
+-		return
+-	}
+-	if user.Password != req.Password {
+-		rsp.SetError("解密失败")
+-		return
+-	}
+-
+-	// 更新token
+-	user.AuthToken = s.GenToken(user.ID ^ authXor)
+-	user.UserToken = s.GenToken(user.ID)
+-	if err := db.UpOFQuick(user); err != nil {
+-		rsp.SetError("更新失败")
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+ 
+@@ -75,29 +63,20 @@ func (s *Server) loginByNameV1(c *gin.Context) {
+ }
+ 
+ func (s *Server) autoLoginV1(c *gin.Context) {
+-	req := new(quick.AutoLoginRequest)
+ 	rsp := quick.NewResponse()
+ 	defer c.JSON(200, rsp)
+-	if err := alg.DecryptedData(c, &req); err != nil {
+-		rsp.SetError("解密失败")
+-		log.App.Debugf("gin req autoLogin error: %v", err)
+-		return
+-	}
+-	token, err := s.ToToken(req.AuthToken)
++	authToken, err := readAutoLoginToken(c)
+ 	if err != nil {
+-		rsp.SetError("解密失败")
++		rsp.SetError("登录请求无效")
+ 		return
+ 	}
+-	user, err := db.GetOFQuick(token.ID ^ authXor)
++	user, err := s.persistedAuthUser(authToken)
+ 	if err != nil {
+-		rsp.SetError("没有该账号")
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+-	// 更新token
+-	// user.AuthToken = s.GenToken(user.ID^13745713)
+-	user.UserToken = s.GenToken(user.ID)
+-	if err := db.UpOFQuick(user); err != nil {
+-		rsp.SetError("更新失败")
++	if err := s.refreshLogin(user); err != nil {
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+ 
+@@ -113,14 +92,13 @@ func (s *Server) getUserInfoV1(c *gin.Context) {
+ 		log.App.Debugf("gin req getUserInfo error: %v", err)
+ 		return
+ 	}
+-	token, err := s.ToToken(req.AuthToken)
++	user, err := s.persistedAuthUser(req.AuthToken)
+ 	if err != nil {
+-		rsp.SetError("解密失败")
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+-	user, err := db.GetOFQuick(token.ID ^ authXor)
+-	if err != nil {
+-		rsp.SetError("没有该账号")
++	if req.Uid != "" && req.Uid != strconv.FormatUint(uint64(user.ID), 10) {
++		rsp.SetError("账号与登录凭据不匹配")
+ 		return
+ 	}
+ 
+diff --git a/sdk/user_v2.go b/sdk/user_v2.go
+index f9312ac..d688c94 100644
+--- a/sdk/user_v2.go
++++ b/sdk/user_v2.go
+@@ -49,21 +49,9 @@ func (s *Server) loginByNameV2(c *gin.Context) {
+ 		log.App.Debugf("gin req autoLogin error: %v", err)
+ 		return
+ 	}
+-	user, err := db.OrCreateOFQuick(req.Username, req.Password)
++	user, err := s.passwordLogin(req.Username, req.Password)
+ 	if err != nil {
+-		rsp.SetError("解密失败")
+-		return
+-	}
+-	if user.Password != req.Password {
+-		rsp.SetError("解密失败")
+-		return
+-	}
+-
+-	// 更新token
+-	user.AuthToken = s.GenToken(user.ID ^ authXor)
+-	user.UserToken = s.GenToken(user.ID)
+-	if err := db.UpOFQuick(user); err != nil {
+-		rsp.SetError("更新失败")
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+ 
+@@ -71,29 +59,20 @@ func (s *Server) loginByNameV2(c *gin.Context) {
+ }
+ 
+ func (s *Server) autoLoginV2(c *gin.Context) {
+-	req := new(quick.AutoLoginRequest)
+ 	rsp := quick.NewResponse()
+ 	defer c.JSON(200, rsp)
+-	if err := alg.DecryptedData(c, &req); err != nil {
+-		rsp.SetError("解密失败")
+-		log.App.Debugf("gin req autoLogin error: %v", err)
+-		return
+-	}
+-	token, err := s.ToToken(req.AuthToken)
++	authToken, err := readAutoLoginToken(c)
+ 	if err != nil {
+-		rsp.SetError("解密失败")
++		rsp.SetError("登录请求无效")
+ 		return
+ 	}
+-	user, err := db.GetOFQuick(token.ID ^ authXor)
++	user, err := s.persistedAuthUser(authToken)
+ 	if err != nil {
+-		rsp.SetError("没有该账号")
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+-	// 更新token
+-	// user.AuthToken = s.GenToken(user.ID^13745713)
+-	user.UserToken = s.GenToken(user.ID)
+-	if err := db.UpOFQuick(user); err != nil {
+-		rsp.SetError("更新失败")
++	if err := s.refreshLogin(user); err != nil {
++		rsp.SetError(err.Error())
+ 		return
+ 	}
+ 
+@@ -119,6 +98,10 @@ func (s *Server) checkLoginV2(c *gin.Context) {
+ 		rsp.SetError("没有该账号")
+ 		return
+ 	}
++	if req.Uid != strconv.FormatUint(uint64(user.ID), 10) || req.Token == "" || req.Token != user.UserToken {
++		rsp.SetError("账号与登录凭据不匹配，请重新登录")
++		return
++	}
+ 	userCheck, err := db.OrCreateOFQuickCheck(strconv.Itoa(int(user.ID)))
+ 	if err != nil {
+ 		rsp.SetError("没有该账号")
+diff --git a/sdk/token.go b/sdk/token.go
+index 3116fc2..16d90db 100644
+--- a/sdk/token.go
++++ b/sdk/token.go
+@@ -4,6 +4,7 @@ import (
+ 	"errors"
+ 	"github.com/gin-gonic/gin"
+ 	"gucooing/lolo/db"
++	"gucooing/lolo/pkg/alg"
+ 	"gucooing/lolo/protocol/quick"
+ 	"net/http"
+ 	"strconv"
+@@ -16,16 +17,18 @@ import (
+ )
+ 
+ type Token struct {
+-	ID   uint32 `json:"id"`
+-	Time int64  `json:"time"`
+-	Key  string `json:"key"`
++	Nonce string `json:"nonce,omitempty"`
++	ID    uint32 `json:"id"`
++	Time  int64  `json:"time"`
++	Key   string `json:"key"`
+ }
+ 
+ func (s *Server) GenToken(id uint32) string {
+ 	t := &Token{
+-		ID:   id,
+-		Time: time.Now().Add(10 * time.Minute).Unix(),
+-		Key:  config.GetGucooingApiKey(),
++		ID:    id,
++		Nonce: alg.RandHex(16),
++		Time:  time.Now().Add(10 * time.Minute).Unix(),
++		Key:   config.GetGucooingApiKey(),
+ 	}
+ 	tokenBin, err := sonic.Marshal(t)
+ 	if err != nil {
+diff --git a/sdk/system.go b/sdk/system.go
+index 98aa1b0..e7f0ff9 100644
+--- a/sdk/system.go
++++ b/sdk/system.go
+@@ -100,7 +100,11 @@ func systemInitV2(c *gin.Context) {
+ 	rsp.SetData(&quick.SystemInitResultV2{
+ 		ClientIp: c.ClientIP(),
+ 		PtConfig: &quick.PtConfig{
+-			UseSms: "1",
++			UseSms:        "1",
++			MainLoginType: "3",
++			RmAccountLg:   "0",
++			DisFastReg:    "1",
++			HideMyFunc:    &quick.HideMyFunc{HideRegBtn: 1},
+ 			FcmTips: &quick.FcmTips{
+ 				NoAdultLogoutTip: "根据法规管控，当前为防沉迷管控时间，您将被强制下线。",
+ 			},
+diff --git a/db/of_quick.go b/db/of_quick.go
+index 7186026..81bad53 100644
+--- a/db/of_quick.go
++++ b/db/of_quick.go
+@@ -1,5 +1,14 @@
+ package db
+ 
++import (
++	"errors"
++	"strings"
++
++	"gorm.io/gorm"
++	"gorm.io/gorm/clause"
++	"gorm.io/plugin/dbresolver"
++)
++
+ // 快游戏sdk
+ type OFQuick struct {
+ 	ID        uint32 `gorm:"primarykey;autoIncrement;index"`
+@@ -10,33 +19,104 @@ type OFQuick struct {
+ 	AuthToken string `gorm:"not null"` // 自动登录
+ }
+ 
+-func CreateOFQuick(username string, password string) (*OFQuick, error) {
+-	q := &OFQuick{
+-		Username: username,
+-		Password: password,
++// Existing game rows can outlive their SDK credentials. Never assign their IDs to a new account.
++func (q *OFQuick) BeforeCreate(tx *gorm.DB) error {
++	if q.ID != 0 {
++		return nil
+ 	}
+-	err := db.Create(q).Error
+-	return q, err
++	var candidate uint32
++	// First free positive ID, including orphan game identities. Keep automatic IDs within
++	// signed int32 for older SDKs; explicit historical IDs remain untouched.
++	if err := tx.Raw(`SELECT COALESCE(MIN(c.candidate), 0) FROM (
++ SELECT 1 AS candidate
++ UNION SELECT id + 1 FROM of_quick WHERE id < 2147483647
++ UNION SELECT sdk_uid + 1 FROM of_user WHERE sdk_uid < 2147483647
++ ) c LEFT JOIN of_quick q ON q.id = c.candidate
++ LEFT JOIN of_user u ON u.sdk_uid = c.candidate
++ WHERE q.id IS NULL AND u.sdk_uid IS NULL AND c.candidate > 0`).Scan(&candidate).Error; err != nil {
++		return err
++	}
++	if candidate == 0 {
++		return errors.New("SDK account IDs exhausted")
++	}
++	q.ID = candidate
++	return nil
++}
++
++var ErrEmptyCredentials = errors.New("账号和密码不能为空")
++
++func CreateOFQuick(username, password string) (*OFQuick, error) {
++	if strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
++		return nil, ErrEmptyCredentials
++	}
++	q := &OFQuick{Username: username, Password: password}
++	return q, db.Create(q).Error
+ }
+ 
+ func GetOFQuick(id uint32) (*OFQuick, error) {
+ 	q := new(OFQuick)
+-	err := db.Where("id = ?", id).First(q).Error
++	err := db.Clauses(dbresolver.Write).Where("id = ?", id).First(q).Error
+ 	return q, err
+ }
+ 
++// Insert only a missing account. A competing first login must never replace its password.
+ func OrCreateOFQuick(username, password string) (*OFQuick, error) {
+-	q := &OFQuick{
+-		Username: username,
+-		Password: password,
++	if strings.TrimSpace(username) == "" || strings.TrimSpace(password) == "" {
++		return nil, ErrEmptyCredentials
++	}
++	for attempt := 0; attempt < 4; attempt++ {
++		q := new(OFQuick)
++		err := db.Clauses(dbresolver.Write).Where("username = ?", username).First(q).Error
++		if err == nil {
++			return q, nil
++		}
++		if !errors.Is(err, gorm.ErrRecordNotFound) {
++			return nil, err
++		}
++		q = &OFQuick{Username: username, Password: password}
++		if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(q).Error; err != nil {
++			return nil, err
++		}
++		q = new(OFQuick)
++		err = db.Clauses(dbresolver.Write).Where("username = ?", username).First(q).Error
++		if err == nil {
++			return q, nil
++		}
++		if !errors.Is(err, gorm.ErrRecordNotFound) {
++			return nil, err
++		}
+ 	}
+-	err := db.Where("username = ?", username).FirstOrCreate(q).Error
+-	if err != nil {
++	return nil, errors.New("account creation conflict; retry")
++}
++
++// Exact persisted credentials also survive RSA/API key changes. Never infer an ID from an untrusted token.
++func GetOFQuickByAuthToken(token string) (*OFQuick, error) {
++	if strings.TrimSpace(token) == "" {
++		return nil, gorm.ErrRecordNotFound
++	}
++	var rows []OFQuick
++	if err := db.Clauses(dbresolver.Write).Where("auth_token = ?", token).Limit(2).Find(&rows).Error; err != nil {
+ 		return nil, err
+ 	}
+-	return q, err
++	if len(rows) != 1 || rows[0].AuthToken != token {
++		return nil, gorm.ErrRecordNotFound
++	}
++	return &rows[0], nil
+ }
+ 
+-func UpOFQuick(q *OFQuick) error {
+-	return db.Save(q).Error
++// SDK login writes only credentials; stale account snapshots cannot overwrite profile/password fields.
++func UpdateOFQuickTokens(id uint32, authToken, userToken string) error {
++	if id == 0 || authToken == "" || userToken == "" {
++		return errors.New("invalid login tokens")
++	}
++	result := db.Model(&OFQuick{}).Where("id = ?", id).Updates(map[string]interface{}{"auth_token": authToken, "user_token": userToken})
++	if result.Error != nil {
++		return result.Error
++	}
++	if result.RowsAffected != 1 {
++		return gorm.ErrRecordNotFound
++	}
++	return nil
+ }
++
++func UpOFQuick(q *OFQuick) error { return db.Save(q).Error }
+diff --git a/game/model/sandbox_ability_badge.go b/game/model/sandbox_ability_badge.go
+new file mode 100644
+--- /dev/null
++++ b/game/model/sandbox_ability_badge.go
+@@ -0,0 +1,172 @@
++package model
++
++import (
++	"encoding/json"
++	"errors"
++	"sort"
++
++	"gucooing/lolo/gdconf"
++	"gucooing/lolo/protocol/excel"
++	"gucooing/lolo/protocol/proto"
++)
++
++// Keep this subsystem in the existing player archive so old snapshots require
++// neither a schema migration nor changes to unrelated ability persistence.
++const abilityBadgeArchiveKey = "server.abilityBadge.v1"
++
++var ErrAbilityBadge = errors.New("invalid or unsupported ability badge request")
++
++type abilityBadgeSave struct {
++	Pages   map[uint32]*proto.AbilityBadgePageInfo `json:"pages,omitempty"`
++	Rewards []uint32                               `json:"rewards,omitempty"`
++}
++
++func (s *Player) badgeSave() (*abilityBadgeSave, error) {
++	m := &abilityBadgeSave{Pages: make(map[uint32]*proto.AbilityBadgePageInfo)}
++	if s.Archive != nil {
++		if raw := s.Archive.ArchiveMap[abilityBadgeArchiveKey]; raw != "" {
++			if err := json.Unmarshal([]byte(raw), m); err != nil {
++				return nil, err
++			}
++		}
++	}
++	if m.Pages == nil {
++		m.Pages = make(map[uint32]*proto.AbilityBadgePageInfo)
++	}
++	return m, nil
++}
++func (s *Player) storeBadgeSave(m *abilityBadgeSave) {
++	raw, _ := json.Marshal(m)
++	s.GetArchive().SetArchiveMap(abilityBadgeArchiveKey, string(raw))
++}
++func badgeContains(ids []uint32, id uint32) bool {
++	for _, v := range ids {
++		if v == id {
++			return true
++		}
++	}
++	return false
++}
++func badgeArea(page uint32) *excel.StoneAreaDataConfigure {
++	for _, a := range gdconf.GetMoonStone().GetStoneAreaData().GetDatas() {
++		if uint32(a.ID) == page {
++			return a
++		}
++	}
++	return nil
++}
++func badgeNodes(page uint32) []*excel.StoneUnlockDataGroupInfo {
++	a := badgeArea(page)
++	if a == nil {
++		return nil
++	}
++	for _, u := range gdconf.GetMoonStone().GetStoneUnlockData().GetDatas() {
++		if u.ID == a.UnlockID {
++			return u.StoneUnlockDataGroupInfo
++		}
++	}
++	return nil
++}
++func validBadgeNode(n *excel.StoneUnlockDataGroupInfo) bool {
++	return n != nil && n.BoxID > 0 && n.IconID > 0 && n.ItemID > 0 && n.ItemCount > 0
++}
++
++// ApplySandboxAbilityBadges records configured, visible boxes only. Empty grid
++// cells (IconID/ItemID zero) are layout placeholders, never activated boxes.
++func (s *Player) ApplySandboxAbilityBadges() error {
++	m, err := s.badgeSave()
++	if err != nil {
++		return err
++	}
++	for _, a := range gdconf.GetMoonStone().GetStoneAreaData().GetDatas() {
++		page := uint32(a.ID)
++		p := m.Pages[page]
++		if p == nil {
++			p = &proto.AbilityBadgePageInfo{Page: page}
++			m.Pages[page] = p
++		}
++		for _, n := range badgeNodes(page) {
++			if validBadgeNode(n) && !badgeContains(p.ActiveBoxIds, uint32(n.BoxID)) {
++				p.ActiveBoxIds = append(p.ActiveBoxIds, uint32(n.BoxID))
++			}
++		}
++		sort.Slice(p.ActiveBoxIds, func(i, j int) bool { return p.ActiveBoxIds[i] < p.ActiveBoxIds[j] })
++	}
++	s.storeBadgeSave(m)
++	return nil
++}
++func (s *Player) AbilityBadgeInfo(scene uint32, sandbox bool) (*proto.AbilityBadgeListRsp, error) {
++	if scene != 0 {
++		found := false
++		for _, a := range gdconf.GetMoonStone().GetStoneAreaData().GetDatas() {
++			if uint32(a.SceneID) == scene {
++				found = true
++				break
++			}
++		}
++		if !found {
++			return nil, ErrAbilityBadge
++		}
++	}
++	if sandbox {
++		if err := s.ApplySandboxAbilityBadges(); err != nil {
++			return nil, err
++		}
++	}
++	m, err := s.badgeSave()
++	if err != nil {
++		return nil, err
++	}
++	out := &proto.AbilityBadgeListRsp{Status: proto.StatusCode_StatusCode_OK}
++	for _, a := range gdconf.GetMoonStone().GetStoneAreaData().GetDatas() {
++		page := uint32(a.ID)
++		if scene != 0 && scene != uint32(a.SceneID) {
++			continue
++		}
++		p := m.Pages[page]
++		if p == nil {
++			p = &proto.AbilityBadgePageInfo{Page: page}
++		}
++		// Do not hand the mutable persistent slice to callers.
++		out.AbilityBadgePages = append(out.AbilityBadgePages, &proto.AbilityBadgePageInfo{Page: page, IsReward: p.IsReward, ActiveBoxIds: append([]uint32(nil), p.ActiveBoxIds...)})
++	}
++	sort.Slice(out.AbilityBadgePages, func(i, j int) bool { return out.AbilityBadgePages[i].Page < out.AbilityBadgePages[j].Page })
++	for _, a := range gdconf.GetAllAchieveConfigure() {
++		if a.NewFunctionOfAchievement != int32(proto.EFunctionOfAchievement_EFunctionOfAchievement_MoonStone) {
++			continue
++		}
++		var count uint64
++		// Sandbox completion is deliberately scoped to MoonStone achievements.
++		if sandbox && a.CountParam > 0 {
++			count = uint64(a.CountParam)
++		}
++		out.AbilityBadgeAchieves = append(out.AbilityBadgeAchieves, &proto.Achieve{AchieveId: uint32(a.ID), Count: count})
++	}
++	sort.Slice(out.AbilityBadgeAchieves, func(i, j int) bool {
++		return out.AbilityBadgeAchieves[i].AchieveId < out.AbilityBadgeAchieves[j].AchieveId
++	})
++	out.AbilityBadgeRewardAchieveIds = append([]uint32(nil), m.Rewards...)
++	return out, nil
++}
++
++// Activation is supported only in sandbox until live achievement progress and
++// node reward semantics are implemented. Every accepted box is configuration bound.
++func (s *Player) ActivateAbilityBadge(page, box uint32, sandbox bool) ([]*proto.ItemDetail, error) {
++	if !sandbox {
++		return nil, ErrAbilityBadge
++	}
++	found := false
++	for _, n := range badgeNodes(page) {
++		if validBadgeNode(n) && uint32(n.BoxID) == box {
++			found = true
++			break
++		}
++	}
++	if !found {
++		return nil, ErrAbilityBadge
++	}
++	if err := s.ApplySandboxAbilityBadges(); err != nil {
++		return nil, err
++	}
++	return nil, nil
++}

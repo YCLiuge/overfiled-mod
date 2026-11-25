@@ -186,6 +186,27 @@ func TestLocalSandboxAppearanceExtrasEquip(t *testing.T) {
 	seen := map[int32]bool{}
 	for id, w := range cat.Weapons {
 		kind := int32(w.NewWeaponType)
+		if kind == int32(proto.EWeaponType_EWeaponType_Unarmed) {
+			// Empty hand uses the held-tool request, not an appearance slot.
+			g.CharacterGatherWeaponUpdate(p, &alg.GameMsg{PacketHead: &proto.PacketHead{PacketId: 819}, Body: &proto.CharacterGatherWeaponUpdateReq{CharacterId: charID, WeaponId: weapons[id]}})
+			if conn.packets[len(conn.packets)-1] != 819 || conn.bodies[len(conn.bodies)-1].(*proto.CharacterGatherWeaponUpdateRsp).Status != proto.StatusCode_StatusCode_OK || c.GatherWeapon != id {
+				t.Fatal("empty-hand tool could not be selected")
+			}
+			select {
+			case ctx := <-ch.serverSceneSyncChan:
+				if ctx.CharacterId != charID || ctx.ActionType != proto.SceneActionType_SceneActionType_UPDATE_EQUIP {
+					t.Fatal("empty-hand selection did not synchronize")
+				}
+				ch.sceneServerDatas = make(map[uint32]*proto.ServerSceneSyncData)
+				ch.serverSceneSync(ctx)
+				if ch.sceneServerDatas[p.UserId].ServerData[0].Player.GetTeam().GetChar1().GetGatherWeapon() != id {
+					t.Fatal("scene lost selected empty-hand tool")
+				}
+			default:
+				t.Fatal("missing empty-hand scene sync")
+			}
+			continue
+		}
 		set := setters[kind]
 		if set == nil {
 			t.Fatalf("unexpected weapon category %d", kind)

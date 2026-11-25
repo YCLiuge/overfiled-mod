@@ -107,7 +107,7 @@ func TestLocalDyeFailureAtomicityAndChannelReplacement(t *testing.T) {
 	p.SelectOutfitColorant(id, 402)
 	p.PreviewOutfitDye(&proto.OutfitDyeReq{OutfitId: id, Pos: 1})
 	before, _ := json.Marshal(p)
-	for _, r := range []*proto.OutfitDyeReq{nil, {OutfitId: 999}, {OutfitId: id, Pos: SandboxDyePositionLimit}, {OutfitId: id, SchemeIndex: 1}, {OutfitId: id, SpecifyColor: &proto.PosColor{Red: 256}}, {OutfitId: id, Uvy: float32(math.NaN())}} {
+	for _, r := range []*proto.OutfitDyeReq{nil, {OutfitId: 999}, {OutfitId: id, Pos: SandboxDyePositionLimit}, {OutfitId: id, SchemeIndex: SandboxVisibleDyeSchemeCount}, {OutfitId: id, SpecifyColor: &proto.PosColor{Red: 256}}, {OutfitId: id, Uvy: float32(math.NaN())}} {
 		if _, err := p.PreviewOutfitDye(r); err == nil {
 			t.Fatalf("invalid accepted: %v", r)
 		}
@@ -116,7 +116,7 @@ func TestLocalDyeFailureAtomicityAndChannelReplacement(t *testing.T) {
 			t.Fatal("invalid preview changed state")
 		}
 	}
-	for _, r := range []*proto.OutFitDyeSaveReq{nil, {OutfitId: id, Pos: 2}, {OutfitId: 999, Pos: 1}, {OutfitId: id, Pos: 1, SchemeIndex: 1}} {
+	for _, r := range []*proto.OutFitDyeSaveReq{nil, {OutfitId: id, Pos: 2}, {OutfitId: 999, Pos: 1}, {OutfitId: id, Pos: 1, SchemeIndex: SandboxVisibleDyeSchemeCount}} {
 		if _, _, err := p.SaveOutfitDye(r); err == nil {
 			t.Fatal("invalid save accepted")
 		}

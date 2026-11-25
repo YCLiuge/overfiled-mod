@@ -68,7 +68,7 @@ func TestLocalDyeHandlerFlow(t *testing.T) {
 	}
 	c := p.GetCharacterModel().GetCharacterInfo(101001)
 	before, _ := json.Marshal(c)
-	for _, scheme := range []uint32{1, model.SandboxDyeSchemeLimit} {
+	for _, scheme := range []uint32{model.SandboxVisibleDyeSchemeCount, model.SandboxDyeSchemeLimit} {
 		send(&proto.OutfitPresetUpdateReq{CharId: 101001, Preset: &proto.OutfitPreset{Hat: 4610231, HatDyeSchemeIndex: scheme}}, g.OutfitPresetUpdate)
 		if conn.bodies[0].(*proto.OutfitPresetUpdateRsp).Status != proto.StatusCode_StatusCode_BAD_REQ {
 			t.Fatal("invalid scheme worn")
@@ -99,6 +99,22 @@ func TestLocalDyeHandlerFlow(t *testing.T) {
 	afterSwitch, _ := json.Marshal(c)
 	if string(afterSwitch) != string(before) {
 		t.Fatal("invalid switch mutated")
+	}
+	// All five visible slots must work without a manual unlock request,
+	// including the formerly locked second through fifth choices.
+	for index := uint32(0); index < model.SandboxVisibleDyeSchemeCount; index++ {
+		send(&proto.OutfitDyeReq{OutfitId: 4610231, SchemeIndex: index, Pos: 1, SpecifyColor: &proto.PosColor{Red: 20 + index}}, g.OutfitDye)
+		if conn.bodies[0].(*proto.OutfitDyeRsp).Status != proto.StatusCode_StatusCode_OK {
+			t.Fatalf("visible slot %d preview failed", index)
+		}
+		send(&proto.OutFitDyeSaveReq{OutfitId: 4610231, SchemeIndex: index, Pos: 1, IsSaveDyeResult: true}, g.OutFitDyeSave)
+		if len(conn.bodies) != 2 || conn.bodies[1].(*proto.OutFitDyeSaveRsp).Status != proto.StatusCode_StatusCode_OK {
+			t.Fatalf("visible slot %d save failed", index)
+		}
+		send(&proto.OutfitPresetUpdateReq{CharId: 101001, Preset: &proto.OutfitPreset{Hat: 4610231, HatDyeSchemeIndex: index}}, g.OutfitPresetUpdate)
+		if conn.bodies[0].(*proto.OutfitPresetUpdateRsp).Status != proto.StatusCode_StatusCode_OK {
+			t.Fatalf("visible slot %d wear failed", index)
+		}
 	}
 	config.CONF.Game.Sandbox = false
 	before, _ = json.Marshal(p)
