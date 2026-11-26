@@ -8,6 +8,32 @@
 
 客户端重定向插件 `0.3.2` 默认隐藏游戏内 `OutLog` 的错误堆栈、背景和反馈按钮，保留原生错误收集与日志保存。此功能仅影响提示界面，不修复“初始座椅ID不能为0”等底层玩法错误。`UserData/private-server.json` 可设置 `"HideErrorOverlay": false` 恢复显示。更新 DLL 或配置后须退出并重新启动游戏；无需重启服务器。界面补丁安装失败时会单独警告，不影响重定向功能。
 
+## 限定卡池界面修复
+
+客户端插件 `0.3.3` 补齐沙盒卡池的客户端时间处理。原生 `GachaData.CheckState()` 会根据客户端资源的起止日期关闭过期或尚未开始的限定池，即使服务器已经返回该池。新版在 `GachaModel.SetGacha` 收到完整列表时记录服务器明确标记 `IsFree` 的卡池，并在原生状态刷新后为这些池使用沙盒有效期；维护强制关闭仍然生效。列表替换、非免费更新和退出登录都会撤销对应授权。它不新增无配置卡池，不改变服务器抽取、奖励或存档规则。
+
+此功能仅随已启用的私服重定向加载，配置 `SandboxGacha: false` 可关闭。更新后必须退出并重新启动游戏；服务器无需重启。验证：新增卡池行为测试与当前游戏互操作程序集接口检查，现有重定向策略回归及服务器全量测试通过。实机限定池抽取仍需在重启游戏后确认。
+
+```powershell
+dotnet run --project private-server/ClientRedirect.Verify/Gacha.Verify.csproj
+```
+
+## 免原 SDK 自动登录
+
+客户端插件 `0.4.0` 在已启用的私服模式下默认使用自动登录。进入登录界面后直接调用本地认证接口，取得网关凭据，再沿游戏原有调度、版本检查和网关流程进入游戏；不弹原 SDK 账号窗口。无需修改服务端或关闭 token 校验。`UserData/private-server.json` 设置 `AutoLogin: false` 可恢复原 SDK 登录方式。`Enabled: false` 时不会安装此功能。
+
+首次自动生成随机本地账号，保存为游戏目录的 `UserData/private-server-account.json`；后续通过保存的自动登录凭据恢复，轮换凭据在请求网关凭据前落盘。这个文件包含明文密码和登录凭据，请备份并保密，不要上传。账号绑定当前服务地址，更换本地/隧道地址时会停止并要求使用相应账号文件，不会静默换号。服务器不可用、认证失败或配置损坏时停留登录页，修复后点击开始重试。
+
+默认生成的是新账号。如需原有角色，在首次使用前创建该文件，仅填入已有本地账号的 `username` 和 `password`；例如 `{"username":"你的本地账号","password":"你的本地密码"}`。已有文件需先备份；恢复凭据失效时可在备份后清空 `auth_token` 以重新验证原密码，保留其他字段。不要填写原平台密码。更新插件后需要退出并重新启动游戏；安装更新不会自动把当前官方连接切到私服。
+
+验证命令：`dotnet run --project private-server/LocalLogin.Verify -c Release`、`dotnet run --project private-server/AutoLogin.Verify -c Release`。这些检查认证协议、凭据轮换、失败路径、界面时序及游戏程序集接口；完整入场仍需重启客户端实机确认。
+
+## 关闭所有操作引导
+
+客户端插件 `0.4.1` 默认禁用物品/任务触发的新手引导、引导面板与遮罩、场景组件创建的箭头引导，以及挑战、解谜、装备教学提示。任务完成流程直接保留原回调，不再包装引导步骤；正常剧情、场景切换和玩法完成事件继续执行。此选项独立于私服重定向开关，`UserData/private-server.json` 设置 `"DisableGuides": false` 可恢复原引导。不修改账号存档或教程完成记录。
+
+替换 DLL 后必须完全退出并重新启动游戏，当前进程已有的遮罩不会因磁盘文件更新而消失；服务器无需重启。验证命令：`dotnet run --project private-server/Guide.Verify -c Release`，覆盖当前游戏程序集接口、禁用前缀和任务回调透传；实际点击效果仍需重启游戏后确认。
+
 ## 本地账号恢复
 
 [Recover-LocalAccounts.py](Recover-LocalAccounts.py) 默认只读检查账号数量；`--apply --output-dir 私密目录` 才会写入。应用前须正常关闭服务器。脚本先备份完整数据库，为没有 OFQuick 凭据的旧 SDK UID 创建 `local_游戏UID` 账号和 16 位随机密码，显式绑定原角色；用户名冲突时增加后缀，已有账号、密码和角色映射不变。报告列出所有 SDK 账号及其游戏 UID、昵称；尚无角色的 SDK 账号和历史探针身份会注明。
@@ -94,7 +120,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\private-server\Install
 | Lolo 日志 TCP | `127.0.0.1:12000` |
 | 现有 Mod AI 控制接口 | `127.0.0.1:8080`（不属于 Lolo） |
 
-私服使用 SQLite。HTTP/TCP 仅监听回环地址。PC 本地测试按上游说明关闭 `GateWay.CheckToken`；这只改变 Lolo 自身的令牌检查设置。配置文件为 `Lolo/config.json`，工作目录必须是 `Lolo`，启动脚本已处理。
+私服使用 SQLite。HTTP/TCP 仅监听回环地址。新版自动登录取得真实网关凭据，支持保留 `GateWay.CheckToken` 校验；旧版 PC 绕过校验的说明不再是此流程的要求。配置文件为 `Lolo/config.json`，工作目录必须是 `Lolo`，启动脚本已处理。
 
 插件仅匹配这三个完整域名，保留路径与查询参数：
 

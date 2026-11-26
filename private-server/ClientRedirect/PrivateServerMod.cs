@@ -3,7 +3,7 @@ using System.Text.Json;
 using HarmonyLib;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(OverField.PrivateServer.PrivateServerMod), "OverField Local Server Redirect", "0.3.2", "Local")]
+[assembly: MelonInfo(typeof(OverField.PrivateServer.PrivateServerMod), "OverField Local Server Redirect", "0.4.1", "Local")]
 [assembly: MelonPlatformDomain(MelonPlatformDomainAttribute.CompatibleDomains.IL2CPP)]
 
 namespace OverField.PrivateServer;
@@ -27,6 +27,9 @@ public sealed class PrivateServerMod : MelonMod
         public string TunnelKey { get; set; } = "";
         public bool SkipHotUpdate { get; set; }
         public bool HideErrorOverlay { get; set; } = true;
+        public bool SandboxGacha { get; set; } = true;
+        public bool AutoLogin { get; set; } = true;
+        public bool DisableGuides { get; set; } = true;
     }
 
     public override void OnInitializeMelon()
@@ -43,6 +46,16 @@ public sealed class PrivateServerMod : MelonMod
             }
             var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(path))
                 ?? throw new InvalidDataException("Config is null");
+            if (settings.DisableGuides)
+            {
+                var guideHarmony = new HarmonyLib.Harmony("OverField.PrivateServer.DisableGuides");
+                try { OverField.PrivateServer.DisableGuides.Install(guideHarmony); }
+                catch (Exception ex)
+                {
+                    guideHarmony.UnpatchSelf();
+                    MelonLogger.Warning("[PrivateServer] Disable guides unavailable: " + ex.GetType().Name);
+                }
+            }
             if (!settings.Enabled) { MelonLogger.Msg("[PrivateServer] Disabled in config."); return; }
             if (settings.TunnelEnabled)
             {
@@ -92,7 +105,20 @@ public sealed class PrivateServerMod : MelonMod
                 HarmonyInstance.Patch(method, prefix: new HarmonyMethod(typeof(PrivateServerMod).GetMethod(handler, BindingFlags.Static | BindingFlags.NonPublic)!));
                 tcpHooks++;
             }
+            if (settings.AutoLogin)
+                AutoLogin.Install(HarmonyInstance, settings.BaseUrl,
+                    Path.Combine(Path.GetDirectoryName(path)!, "private-server-account.json"));
             if (settings.SkipHotUpdate) SkipHotUpdate.Install(HarmonyInstance);
+            if (settings.SandboxGacha)
+            {
+                var gachaHarmony = new HarmonyLib.Harmony("OverField.PrivateServer.SandboxGacha");
+                try { SandboxGacha.Install(gachaHarmony); }
+                catch (Exception ex)
+                {
+                    gachaHarmony.UnpatchSelf();
+                    MelonLogger.Warning("[PrivateServer] Sandbox gacha patch unavailable: " + ex.Message);
+                }
+            }
             if (settings.HideErrorOverlay)
             {
                 var overlayHarmony = new HarmonyLib.Harmony("OverField.PrivateServer.ErrorOverlay");
@@ -108,6 +134,7 @@ public sealed class PrivateServerMod : MelonMod
         }
         catch (Exception e)
         {
+            AutoLogin.Stop();
             HarmonyInstance.UnpatchSelf();
             _tunnel?.Dispose();
             _tunnel = null;
@@ -117,8 +144,11 @@ public sealed class PrivateServerMod : MelonMod
         }
     }
 
+    public override void OnUpdate() => AutoLogin.Tick();
+
     public override void OnDeinitializeMelon()
     {
+        AutoLogin.Stop();
         _tunnel?.Dispose();
         _tunnel = null;
     }
